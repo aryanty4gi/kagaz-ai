@@ -1,0 +1,27 @@
+# Render Blueprint: runs Kagaz AI 24/7 on Render's free plan.
+# Render sets PORT (health page) and RENDER_EXTERNAL_URL (keep-alive ping every 5 min).
+# Enter the secret values in the Render dashboard; they are never stored in the repo.
+services:
+  - type: web
+    name: kagaz-ai
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /
+    envVars:
+      - key: ASI1_API_KEY
+        sync: false
+      - key: KAGAZ_COORDINATOR_SEED
+        sync: false
+      - key: KAGAZ_READER_SEED
+        sync: false
+      - key: KAGAZ_VERIFY_SEED
+        sync: false
+      - key: KAGAZ_RULES_SEED
+        sync: false
+      - key: KAGAZ_ACTION_SEED
+        sync: false
+      - key: KAGAZ_EXPERT_SEED
+        sync: false
+      - key: KAGAZ_ONLINE_CHECKS
+        value: "true"

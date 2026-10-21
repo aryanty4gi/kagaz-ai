@@ -1,0 +1,9 @@
+.env
+.venv
+venv
+.git
+__pycache__
+*.pyc
+.pytest_cache
+*_data.json
+agent_addresses.txt

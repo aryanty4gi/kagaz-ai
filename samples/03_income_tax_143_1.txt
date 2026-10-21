@@ -1,0 +1,6 @@
+INCOME TAX DEPARTMENT, CENTRALIZED PROCESSING CENTRE, BENGALURU
+Intimation u/s 143(1) of the Income-tax Act, 1961
+Name: Aryan Kumar          PAN: ABCPK1234X          Assessment Year: 2026-27
+DIN: CPC/2627/G22/198765432
+Your return of income for AY 2026-27 has been processed. Due to a mismatch between TDS claimed in the return and TDS reported in Form 26AS, a demand of Rs. 18,450 has been determined.
+You are requested to pay the demand or submit your response on the e-filing portal (https://www.incometax.gov.in) under Pending Actions > Response to Outstanding Demand on or before 20/11/2026.

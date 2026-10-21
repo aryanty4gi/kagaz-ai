@@ -1,0 +1,10 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+venv/
+agent*_data*.json
+*_data.json
+private_keys.json
+.pytest_cache/
+agent_addresses.txt
