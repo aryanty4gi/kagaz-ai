@@ -88,3 +88,25 @@ def test_draft_keeps_placeholders_and_facts():
     plan = action.build_plan(fields, rules.explain(fields))
     assert "₹6,240" in plan["draft"]
     assert "[reason" in plan["draft"]
+
+
+def _verdict(text: str) -> str:
+    return verify.verify(reader.extract(text), use_llm=False).verdict
+
+
+def test_linkless_scams_are_caught():
+    assert _verdict("This is CBI officer. A parcel in your name has drugs. You are under "
+                    "digital arrest. Transfer Rs 50,000 to RBI safe account today.") == "SCAM"
+    assert _verdict("Congratulations! You won KBC lottery of 25 lakh. Pay Rs 15,000 "
+                    "processing fee to claim. WhatsApp 9123456789") == "SCAM"
+    assert _verdict("Dear customer your SBI account will be blocked today. Update PAN KYC "
+                    "by calling 9876543210 immediately.") == "SCAM"
+    assert _verdict("Share the OTP sent to your mobile with our executive at 9876543210 "
+                    "to stop your card being blocked.") == "SCAM"
+    assert _verdict("Aapka bijli connection aaj raat 9:30 baje kaat diya jayega. Turant "
+                    "officer se 9876543210 par sampark karein.") != "NO_RED_FLAGS"
+
+
+def test_real_bank_otp_alert_is_not_flagged():
+    assert _verdict("Your OTP for transaction of Rs 2,500 at Amazon is 482913. "
+                    "Do not share it with anyone. - HDFC Bank") == "NO_RED_FLAGS"

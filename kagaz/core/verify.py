@@ -35,6 +35,32 @@ URGENCY = re.compile(
     r"will be (?:blocked|suspended|disconnected) (?:today|tonight)|arrest|"
     r"legal action will be taken|final notice",
     re.IGNORECASE)
+# Scams that arrive with no link at all: fake police/CBI calls, lotteries, fake KYC.
+DIGITAL_ARREST = re.compile(
+    r"digital arrest|\b(?:cbi|ncb|ed|customs|cyber cell|narcotics)\b.{0,60}"
+    r"(?:officer|parcel|case|warrant|arrest)|parcel.{0,40}(?:drugs|illegal)|"
+    r"safe account|rbi (?:safe|secure|verification) account|money laundering case",
+    re.IGNORECASE)
+PRIZE_FEE = re.compile(
+    r"(?:won|winner|lottery|lucky draw|prize|kbc|cashback of).{0,80}"
+    r"(?:fee|charges|tax|pay|deposit|transfer)|processing fee|registration fee to claim",
+    re.IGNORECASE)
+ACCOUNT_THREAT = re.compile(
+    r"(?:account|sim|card|connection|pan|aadhaar).{0,40}"
+    r"(?:will be|is being|has been) (?:blocked|suspended|deactivated|disconnected|kaat)|"
+    r"update (?:your )?(?:pan|kyc|aadhaar)",
+    re.IGNORECASE)
+HINGLISH_URGENCY = re.compile(
+    r"turant|aaj raat|aaj hi|kaat diya jayega|band ho jayega|block ho jayega|"
+    r"jaldi (?:karein|kare)|warna",
+    re.IGNORECASE)
+SHARE_SECRET = re.compile(
+    r"(?:share|tell|send|give|forward|bata\w*)\b.{0,25}\b(?:otp|pin|cvv|password)|"
+    r"(?:otp|pin|cvv)\b.{0,25}\b(?:share|bata)\w* (?:karein|kare|with)",
+    re.IGNORECASE)
+# Genuine bank OTP alerts say "do not share"; they are not asking for the OTP.
+OTP_ALERT = re.compile(r"(?:do not|don't|never) share|is your otp|otp for (?:your )?transaction",
+                       re.IGNORECASE)
 REFUND_BAIT = re.compile(r"refund (?:of|is|has been)? ?(?:approved|sanctioned|pending)",
                          re.IGNORECASE)
 
@@ -131,16 +157,36 @@ def _rule_signals(fields: NoticeFields, text: str) -> tuple[list[Signal], list[d
     if APK.search(text):
         signals.append(Signal("Asks you to install an app/APK", 40,
                               "Government departments never send APK files"))
-    if SECRET_ASK.search(text):
+    if SECRET_ASK.search(text) and not (OTP_ALERT.search(text) and not fields.urls
+                                        and not fields.phones):
         signals.append(Signal("Asks for OTP, PIN, CVV or passwords", 40,
                               "No genuine department asks for these"))
     if UPI.search(text):
         signals.append(Signal("Asks for payment by UPI ID or QR", 20,
                               "Official fines are paid on the department's own portal"))
-    if fields.phones and re.search(r"call|whatsapp|contact", text, re.IGNORECASE):
+    if fields.phones and re.search(r"call|whatsapp|contact|sampark", text, re.IGNORECASE):
         signals.append(Signal("Personal mobile number to contact", 15, ", ".join(fields.phones)))
-    if URGENCY.search(text):
-        signals.append(Signal("Pressure tactics", 10, URGENCY.search(text).group(0)))
+    if SHARE_SECRET.search(text) and not re.search(r"(?:do not|don't|never|mat)\W+share",
+                                                    text, re.IGNORECASE):
+        signals.append(Signal("Tells you to share the OTP/PIN with someone", 30,
+                              "Banks never ask anyone to collect your OTP"))
+    if DIGITAL_ARREST.search(text):
+        signals.append(Signal("Fake police/CBI 'digital arrest' threat", 60,
+                              "Police and CBI never arrest or settle cases over calls or chat, "
+                              "and there is no 'safe account'"))
+    if PRIZE_FEE.search(text):
+        signals.append(Signal("Prize that needs a fee first", 50,
+                              "Real prizes never ask you to pay to claim them"))
+    if ACCOUNT_THREAT.search(text):
+        signals.append(Signal("Threat to block your account or service", 20,
+                              ACCOUNT_THREAT.search(text).group(0)))
+    urgency = URGENCY.search(text) or HINGLISH_URGENCY.search(text)
+    if urgency:
+        signals.append(Signal("Pressure tactics", 10, urgency.group(0)))
+    if fields.phones and not fields.urls and urgency and re.search(
+            r"call|whatsapp|contact|sampark|phone", text, re.IGNORECASE):
+        signals.append(Signal("Asks you to call a mobile number urgently", 15,
+                              "Departments give official helplines, not personal numbers"))
     if REFUND_BAIT.search(text) and fields.urls:
         signals.append(Signal("Refund bait with a link", 20,
                               "Income tax refunds are credited automatically to your bank"))
@@ -152,7 +198,7 @@ def _rule_signals(fields: NoticeFields, text: str) -> tuple[list[Signal], list[d
 LLM_SYSTEM = (
     "You are a fraud analyst for Indian SMS, email and letter scams (fake "
     "e-challans, fake income tax refunds, fake electricity disconnection, fake "
-    "KYC). List only concrete red flags actually present in the text. Return "
+    "KYC, digital arrest, lottery, job and investment scams). List only concrete red flags actually present in the text. Return "
     'JSON: {"red_flags": ["..."], "looks_like_scam": true|false}. '
     "Return an empty list if nothing is suspicious."
 )
@@ -166,7 +212,7 @@ def verify(fields: NoticeFields, use_llm: bool = True) -> VerifyReport:
         data = llm.complete_json(LLM_SYSTEM, text[:4000], max_tokens=300)
         if data and data.get("looks_like_scam") and data.get("red_flags"):
             flags = [str(f)[:120] for f in data["red_flags"][:3]]
-            signals.append(Signal("AI fraud analyst flagged it", 10, "; ".join(flags)))
+            signals.append(Signal("AI fraud analyst flagged it", 25, "; ".join(flags)))
 
     score = max(0, min(100, sum(s.weight for s in signals)))
     report = VerifyReport(score=score, domains=domains, checks_failed=failed)
