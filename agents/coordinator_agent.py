@@ -42,7 +42,7 @@ from kagaz.messages import (
     ReadRequest, ReadResult, RulesRequest, RulesResult, VerifyRequest, VerifyResult,
 )
 
-SPECIALIST_TIMEOUT = int(os.getenv("KAGAZ_SPECIALIST_TIMEOUT", "45"))
+SPECIALIST_TIMEOUT = int(os.getenv("KAGAZ_SPECIALIST_TIMEOUT", "30"))
 REMINDER_CHECK_SECONDS = float(os.getenv("KAGAZ_REMINDER_INTERVAL", "3600"))
 REAL_FET = os.getenv("KAGAZ_REAL_FET", "false").lower() == "true"
 MAX_EXPERT_FEE = float(os.getenv("KAGAZ_MAX_EXPERT_FEE", "1.0"))

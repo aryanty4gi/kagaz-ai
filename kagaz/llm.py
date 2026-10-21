@@ -28,8 +28,10 @@ def _get_client():
         _client = OpenAI(
             base_url=config.ASI1_BASE_URL,
             api_key=config.ASI1_API_KEY,
-            timeout=25,
-            max_retries=1,
+            # One try, no retry: a retry doubled the wait past the coordinator's
+            # specialist timeout, so slow LLM replies always fell back.
+            timeout=15,
+            max_retries=0,
         )
     return _client
 
