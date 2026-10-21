@@ -13,6 +13,17 @@ a bank letter. A team of six Fetch.ai agents:
 4. **Reminds you** before the deadline
 5. **Gets an expert review**, paid agent-to-agent with the Payment Protocol
 
+## Try it live (no install)
+
+Kagaz runs 24/7 on Agentverse. You chat with it inside ASI:One:
+
+1. Open **[asi1.ai](https://asi1.ai)** in a browser (desktop or phone browser; the ASI:One mobile app doesn't support custom agents yet) and sign in.
+2. Type **`@kagaz`** and paste any notice or SMS. Try one from [`samples/`](samples), or this:
+   `This is CBI officer. A parcel in your name has drugs. You are under digital arrest. Transfer Rs 50,000 to RBI safe account today.`
+3. Or open the **[Kagaz Coordinator on Agentverse](https://agentverse.ai/agents/details/agent1qwvc8wrwftwgzlanhhc6k5pq55ukqet5yw7jsej6aqyrlt3ull46u4zrqya/profile)** and click **Chat with Agent**.
+
+Server status: [kagaz-ai-wrgn.onrender.com](https://kagaz-ai-wrgn.onrender.com). The first reply can take up to a minute if the free server was asleep.
+
 Built for Fetch-A-Thon 3.0 (GCET edition) with uAgents, Agentverse, ASI:One,
 the Agent Chat Protocol, ASI:One Interactive Cards and the Agent Payment Protocol.
 
