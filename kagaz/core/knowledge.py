@@ -122,7 +122,8 @@ NOTICE_TYPES: dict[str, dict] = {
         "issuer": "Electricity distribution company (DISCOM)",
         "law": "Electricity Act, 2003, section 56",
         "keywords": ["electricity", "disconnection", "disconnect", "power supply",
-                     "discom", "bijli", "meter", "consumer number", "units"],
+                     "discom", "bijli", "meter", "consumer number", "units",
+                     "बिजली", "कनेक्शन", "मीटर"],
         "what_it_means": (
             "Your electricity provider says a bill is unpaid and supply may be cut."
         ),

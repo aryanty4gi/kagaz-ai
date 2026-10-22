@@ -39,24 +39,29 @@ URGENCY = re.compile(
 DIGITAL_ARREST = re.compile(
     r"digital arrest|\b(?:cbi|ncb|ed|customs|cyber cell|narcotics)\b.{0,60}"
     r"(?:officer|parcel|case|warrant|arrest)|parcel.{0,40}(?:drugs|illegal)|"
-    r"safe account|rbi (?:safe|secure|verification) account|money laundering case",
+    r"safe account|rbi (?:safe|secure|verification) account|money laundering case|"
+    r"डिजिटल अरेस्ट|सेफ अकाउंट",
     re.IGNORECASE)
 PRIZE_FEE = re.compile(
     r"(?:won|winner|lottery|lucky draw|prize|kbc|cashback of).{0,80}"
-    r"(?:fee|charges|tax|pay|deposit|transfer)|processing fee|registration fee to claim",
+    r"(?:fee|charges|tax|pay|deposit|transfer)|processing fee|registration fee to claim|"
+    r"(?:लॉटरी|इनाम|जीत).{0,80}(?:फीस|शुल्क|भुगतान|जमा)",
     re.IGNORECASE)
 ACCOUNT_THREAT = re.compile(
     r"(?:account|sim|card|connection|pan|aadhaar).{0,40}"
     r"(?:will be|is being|has been) (?:blocked|suspended|deactivated|disconnected|kaat)|"
-    r"update (?:your )?(?:pan|kyc|aadhaar)",
+    r"update (?:your )?(?:pan|kyc|aadhaar)|"
+    r"(?:connection|account|sim)\W.{0,40}(?:kaat|kat|band|block) (?:diya|kar|ho)|"
+    r"(?:कनेक्शन|खाता|अकाउंट|सिम|कार्ड).{0,40}(?:काट|बंद|ब्लॉक)",
     re.IGNORECASE)
 HINGLISH_URGENCY = re.compile(
     r"turant|aaj raat|aaj hi|kaat diya jayega|band ho jayega|block ho jayega|"
-    r"jaldi (?:karein|kare)|warna",
+    r"jaldi (?:karein|kare)|warna|तुरंत|आज रात|आज ही|काट दिया जाएगा|बंद कर दिया जाएगा|वरना",
     re.IGNORECASE)
 SHARE_SECRET = re.compile(
     r"(?:share|tell|send|give|forward|bata\w*)\b.{0,25}\b(?:otp|pin|cvv|password)|"
-    r"(?:otp|pin|cvv)\b.{0,25}\b(?:share|bata)\w* (?:karein|kare|with)",
+    r"(?:otp|pin|cvv)\b.{0,25}\b(?:share|bata)\w* (?:karein|kare|with)|"
+    r"(?:ओटीपी|OTP|पिन).{0,25}(?:बताएं|बताइए|शेयर|भेजें)",
     re.IGNORECASE)
 # Genuine bank OTP alerts say "do not share"; they are not asking for the OTP.
 OTP_ALERT = re.compile(r"(?:do not|don't|never) share|is your otp|otp for (?:your )?transaction",
@@ -167,7 +172,7 @@ def _rule_signals(fields: NoticeFields, text: str) -> tuple[list[Signal], list[d
     if UPI.search(text):
         signals.append(Signal("Asks for payment by UPI ID or QR", 20,
                               "Official fines are paid on the department's own portal"))
-    if fields.phones and re.search(r"call|whatsapp|contact|sampark", text, re.IGNORECASE):
+    if fields.phones and re.search(r"call|whatsapp|contact|sampark|संपर्क|कॉल|फ़ोन|फोन|व्हाट्सएप", text, re.IGNORECASE):
         signals.append(Signal("Personal mobile number to contact", 15, ", ".join(fields.phones)))
     if SHARE_SECRET.search(text) and not re.search(r"(?:do not|don't|never|mat)\W+share",
                                                     text, re.IGNORECASE):
@@ -187,7 +192,7 @@ def _rule_signals(fields: NoticeFields, text: str) -> tuple[list[Signal], list[d
     if urgency:
         signals.append(Signal("Pressure tactics", 10, urgency.group(0)))
     if fields.phones and not fields.urls and urgency and re.search(
-            r"call|whatsapp|contact|sampark|phone", text, re.IGNORECASE):
+            r"call|whatsapp|contact|sampark|phone|संपर्क|कॉल|फ़ोन|फोन|व्हाट्सएप", text, re.IGNORECASE):
         signals.append(Signal("Asks you to call a mobile number urgently", 15,
                               "Departments give official helplines, not personal numbers"))
     if REFUND_BAIT.search(text) and fields.urls:

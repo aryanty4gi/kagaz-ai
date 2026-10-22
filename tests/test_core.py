@@ -304,3 +304,11 @@ def test_stripe_checkout_payload_never_leaks_secret(monkeypatch):
     assert out["hosted_url"].startswith("https://checkout.stripe.com")
     assert "sk_test_SECRET" not in str(out)
     assert payments.paid_session(out["session_ids"]) == ("cs_test_2", "pi_123")
+
+
+def test_hindi_scam_sms_is_caught():
+    text = ("प्रिय उपभोक्ता, आपका बिजली कनेक्शन आज रात 9:30 बजे काट दिया जाएगा। "
+            "तुरंत बिजली अधिकारी से 9876543210 पर संपर्क करें।")
+    fields = reader.extract(text)
+    assert fields.notice_type == "electricity_disconnection"
+    assert verify.verify(fields, use_llm=False).verdict == "SCAM"
