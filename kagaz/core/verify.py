@@ -118,6 +118,9 @@ def domain_age_days(domain: str, timeout: float = 4.0) -> tuple[int | None, str]
 
 
 def _rule_signals(fields: NoticeFields, text: str) -> tuple[list[Signal], list[dict], list[str]]:
+    # Photos and screenshots wrap lines anywhere ("digital\narrest"), so match on
+    # single-spaced text.
+    text = re.sub(r"\s+", " ", text)
     signals: list[Signal] = []
     domains: list[dict] = []
     failed: list[str] = []
@@ -223,7 +226,8 @@ def verify(fields: NoticeFields, use_llm: bool = True) -> VerifyReport:
     if score >= 60:
         report.verdict = "SCAM"
         report.advice = [
-            "Do not click the link, pay, or share any details.",
+            ("Do not click the link, pay, or share any details." if fields.urls else
+             "Do not pay, call back, or share any details."),
             f"Check for real dues yourself on {portal}.",
             "Report the message at cybercrime.gov.in or call 1930.",
             knowledge.CYBER_HELP,

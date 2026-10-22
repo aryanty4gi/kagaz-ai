@@ -2,9 +2,10 @@
 
     KAGAZ_USE_MAILBOX=false KAGAZ_ONLINE_CHECKS=false python -m tests.e2e_local
 
-Scenario A (scam):    fake e-challan SMS -> scam card -> "check officially"
+Scenario A (scam):    fake e-challan SMS -> scam card -> report pack -> "check officially"
 Scenario B (genuine): electricity notice -> review card -> proceed -> remind
                       -> expert offer -> pay -> paid expert review arrives
+Scenario C (image):   screenshot of a "digital arrest" SMS -> OCR -> scam card
 The simulated user clicks card buttons by replying with each CTA's selection
 JSON, exactly as ASI:One does for a direct @mention.
 """
@@ -13,19 +14,27 @@ import asyncio
 import json
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
+from uuid import uuid4
 
 os.environ.setdefault("KAGAZ_USE_MAILBOX", "false")
 os.environ.setdefault("KAGAZ_ONLINE_CHECKS", "false")
 
 from uagents import Agent, Bureau, Context  # noqa: E402
 from uagents_core.contrib.protocols.chat import (  # noqa: E402
-    ChatAcknowledgement, ChatMessage, MetadataContent, TextContent,
+    ChatAcknowledgement, ChatMessage, MetadataContent, Resource, ResourceContent, TextContent,
 )
 
 from kagaz import config  # noqa: E402
 from kagaz.cards import text_message  # noqa: E402
 from run_local import build_all  # noqa: E402
+from agents import coordinator_agent  # noqa: E402
+from tests.test_core import DIGITAL_ARREST, render_png  # noqa: E402
+
+# Stand-in for Agentverse storage: the "uploaded" screenshot.
+SCREENSHOT = render_png(DIGITAL_ARREST, dark=True)
+coordinator_agent.download_image = lambda item, identity: (SCREENSHOT, "image/png")
 
 ROOT = Path(__file__).resolve().parent.parent
 SAMPLES = {p.name: p.read_text() for p in (ROOT / "samples").glob("*.txt")}
@@ -39,7 +48,8 @@ user = Agent(name="test_user", seed="kagaz-e2e-test-user", port=8199,
 # What the user does after each card kind / message, per scenario step.
 script = [
     ("send", SAMPLES["01_fake_echallan_sms.txt"]),
-    ("expect_card", "custom", {"action": "proceed"}),
+    ("expect_card", "custom", {"action": "report_scam"}),
+    ("expect_text", "Your scam report pack", {"action": "proceed"}),
     ("expect_card", "detail", None),
     ("send", SAMPLES["04_electricity_disconnection.txt"]),
     ("expect_card", "review", {"action": "proceed"}),
@@ -48,15 +58,26 @@ script = [
     ("expect_card", "review", {"action": "pay_expert"}),
     ("expect_text", "Sent to the Expert Desk", None),
     ("expect_text", "Expert review", None),
+    ("send_image", "screenshot.png"),
+    ("expect_text", "I read this from your image", None),
+    ("expect_card", "custom", None),
 ]
 step = {"i": 0}
 done = asyncio.Event()
 
 
 async def advance(ctx: Context):
-    while step["i"] < len(script) and script[step["i"]][0] == "send":
-        ctx.logger.info(f"USER >> {script[step['i']][1][:60]}...")
-        await ctx.send(COORD, text_message(script[step["i"]][1]))
+    while step["i"] < len(script) and script[step["i"]][0] in ("send", "send_image"):
+        kind, payload = script[step["i"]][:2]
+        ctx.logger.info(f"USER >> {payload[:60]}...")
+        if kind == "send_image":
+            await ctx.send(COORD, ChatMessage(
+                timestamp=datetime.now(timezone.utc), msg_id=uuid4(),
+                content=[ResourceContent(type="resource", resource_id=uuid4(), resource=Resource(
+                    uri="agent-storage://test/screenshot.png",
+                    metadata={"mime_type": "image/png", "role": "user-upload"}))]))
+        else:
+            await ctx.send(COORD, text_message(payload))
         step["i"] += 1
     if step["i"] >= len(script):
         done.set()

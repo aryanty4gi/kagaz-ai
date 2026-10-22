@@ -110,3 +110,73 @@ def test_linkless_scams_are_caught():
 def test_real_bank_otp_alert_is_not_flagged():
     assert _verdict("Your OTP for transaction of Rs 2,500 at Amazon is 482913. "
                     "Do not share it with anyone. - HDFC Bank") == "NO_RED_FLAGS"
+
+
+# ------------------------------------------------------------- images + reports
+
+DIGITAL_ARREST = ("This is CBI officer. A parcel in your name has drugs. You are under "
+                  "digital arrest. Transfer Rs 50,000 to RBI safe account today. "
+                  "Call 9876543210")
+
+
+def render_png(text: str, dark: bool = False) -> bytes:
+    """Draw text like a phone screenshot, for OCR tests."""
+    import io
+    import textwrap
+
+    from PIL import Image, ImageDraw, ImageFont
+
+    font = ImageFont.load_default(size=30)
+    lines = textwrap.wrap(text, 40)
+    bg, fg = ("#111111", "#f0f0f0") if dark else ("white", "black")
+    img = Image.new("RGB", (800, 60 + 42 * len(lines)), bg)
+    draw = ImageDraw.Draw(img)
+    for i, line in enumerate(lines):
+        draw.text((30, 30 + 42 * i), line, fill=fg, font=font)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def test_ocr_reads_a_scam_screenshot():
+    import pytest
+
+    from kagaz.core import ocr
+
+    if not ocr.tesseract_text(render_png("hello world test")):
+        pytest.skip("tesseract not installed")
+    for dark in (False, True):
+        text, method = ocr.image_to_text(render_png(DIGITAL_ARREST, dark=dark))
+        assert method == "ocr"
+        assert "digital arrest" in " ".join(text.lower().split())
+        assert verify.verify(reader.extract(text), use_llm=False).verdict == "SCAM"
+
+
+def test_ocr_rejects_empty_or_huge_images():
+    from kagaz.core import ocr
+
+    assert ocr.image_to_text(b"") == ("", "")
+    assert ocr.image_to_text(b"x" * (ocr.MAX_IMAGE_BYTES + 1)) == ("", "")
+    assert ocr.image_to_text(b"not an image") == ("", "")
+
+
+def test_scam_report_pack():
+    from kagaz.core import report
+
+    fields = reader.extract(DIGITAL_ARREST + " Pay via UPI to cbi.safe@okaxis")
+    rep = verify.verify(fields, use_llm=False).to_dict()
+    complaint = report.complaint_text(fields, rep, today=date(2026, 10, 22))
+    assert "22 Oct 2026" in complaint
+    assert "9876543210" in complaint
+    assert "cbi.safe@okaxis" in complaint
+    assert "digital arrest" in complaint.lower()
+    warning = report.family_warning(fields, rep)
+    assert "1930" in warning and "डिजिटल अरेस्ट" in warning
+    assert report.scam_kind(rep) == "digital_arrest"
+
+
+def test_report_button_is_parsed():
+    from agents.coordinator_agent import parse_selection
+
+    assert parse_selection('{"action": "report_scam"}')["action"] == "report_scam"
+    assert parse_selection("Report this scam + warn my family")["action"] == "report_scam"

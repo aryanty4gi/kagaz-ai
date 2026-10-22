@@ -61,6 +61,30 @@ def complete(system: str, user: str, max_tokens: int = 1200) -> str | None:
         return None
 
 
+def complete_vision(system: str, image_data_url: str, max_tokens: int = 800) -> str | None:
+    """Ask ASI:One to read an image. Returns None if the model or call can't."""
+    client = _get_client()
+    if client is None or OFFLINE.get():
+        return None
+    try:
+        resp = client.chat.completions.create(
+            model=config.ASI1_MODEL,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": [
+                    {"type": "text", "text": "Read this image."},
+                    {"type": "image_url", "image_url": {"url": image_data_url}},
+                ]},
+            ],
+            max_tokens=max_tokens,
+            temperature=0,
+        )
+        return (resp.choices[0].message.content or "").strip()
+    except Exception as err:
+        log.warning("ASI:One image read failed: %s", err)
+        return None
+
+
 def complete_json(system: str, user: str, max_tokens: int = 1200) -> dict[str, Any] | None:
     """Ask for JSON and parse it, tolerating code fences and stray prose."""
     text = complete(

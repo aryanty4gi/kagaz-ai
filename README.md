@@ -3,7 +3,8 @@
 ![tag:innovationlab](https://img.shields.io/badge/innovationlab-3D8BD3)
 ![tag:hackathon](https://img.shields.io/badge/hackathon-5F43F1)
 
-**"Notice mila? Kagaz ko de do."** Paste any official notice or SMS into ASI:One:
+**"Notice mila? Kagaz ko de do."** Paste any official notice or SMS into ASI:One,
+or upload a **screenshot or photo** of it:
 a traffic e-challan, an income tax notice, an electricity disconnection notice,
 a bank letter. A team of six Fetch.ai agents:
 
@@ -12,6 +13,8 @@ a bank letter. A team of six Fetch.ai agents:
 3. **Drafts your reply** and lists the exact official steps
 4. **Reminds you** before the deadline
 5. **Gets an expert review**, paid agent-to-agent with the Payment Protocol
+6. **Fights back against scams**: a ready-to-file cybercrime.gov.in complaint and a
+   WhatsApp warning for your family, in English and Hindi
 
 ## Try it live (no install)
 
@@ -58,7 +61,7 @@ flowchart LR
 | Agent | Role | Fetch.ai features |
 |---|---|---|
 | **Coordinator** | Talks to the user, plans the steps, routes work, runs reminders, pays the expert | Chat Protocol, Interactive Cards (review, form, detail, custom), Payment Protocol (buyer), `on_interval` reminders |
-| **Reader** | Extracts type, issuer, amount, deadline, references, links | ASI:One LLM + deterministic extraction |
+| **Reader** | Reads text and screenshots/photos (OCR); extracts type, issuer, amount, deadline, references, links | Chat Protocol image attachments, Tesseract OCR, ASI:One LLM + deterministic extraction |
 | **Verify** | Scam detection: look-alike domains, shorteners, APK/OTP/UPI asks, pressure tactics, live domain age | Live RDAP lookup, ASI:One second opinion, **also its own Chat Protocol endpoint** |
 | **Rules** | Plain-language explanation grounded in a curated rules base; decides when to escalate | Retrieval-grounded ASI:One generation |
 | **Action** | Draft reply letter, ordered steps, reminder dates | ASI:One LLM + safe templates |
@@ -174,6 +177,7 @@ Each address is fixed by its private seed.
   testnet wallet for real FET transfers.
 - The rules base covers six notice types. Unknown notices get generic safe guidance and are
   escalated.
-- Notices are read from pasted text; photo/PDF upload is next on the roadmap.
+- Photos and screenshots are read with Tesseract OCR (English + Hindi), with ASI:One as a
+  fallback. PDFs need a screenshot or pasted text for now.
 
 *Kagaz gives general information, not legal advice.*

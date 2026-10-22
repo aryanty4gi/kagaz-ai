@@ -3,3 +3,5 @@ openai>=1.40
 python-dotenv>=1.0
 pytest>=8.0
 certifi>=2024.2.2
+pytesseract>=0.3.10
+pillow>=10.0

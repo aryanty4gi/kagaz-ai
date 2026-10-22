@@ -10,6 +10,7 @@ user which step ran in fallback mode, so the conversation never dead-ends.
 """
 
 import asyncio
+import base64
 import json
 import os
 import re
@@ -20,9 +21,13 @@ from uagents import Context, Protocol
 from uagents_core.contrib.protocols.chat import (
     ChatAcknowledgement,
     ChatMessage,
+    MetadataContent,
+    ResourceContent,
+    StartSessionContent,
     TextContent,
     chat_protocol_spec,
 )
+from uagents_core.identity import Identity
 from uagents_core.contrib.protocols.payment import (
     CancelPayment,
     CommitPayment,
@@ -35,7 +40,7 @@ from uagents_core.contrib.protocols.payment import (
 
 from agents.common import make_agent
 from kagaz import cards, config, llm
-from kagaz.core import action, knowledge, reader, rules, verify
+from kagaz.core import action, knowledge, ocr, reader, report as scam_report, rules, verify
 from kagaz.core.reader import NoticeFields
 from kagaz.messages import (
     ActionRequest, ActionResult, ExpertReviewRequest, ExpertReviewResult,
@@ -46,6 +51,7 @@ SPECIALIST_TIMEOUT = int(os.getenv("KAGAZ_SPECIALIST_TIMEOUT", "30"))
 REMINDER_CHECK_SECONDS = float(os.getenv("KAGAZ_REMINDER_INTERVAL", "3600"))
 REAL_FET = os.getenv("KAGAZ_REAL_FET", "false").lower() == "true"
 MAX_EXPERT_FEE = float(os.getenv("KAGAZ_MAX_EXPERT_FEE", "1.0"))
+STORAGE_URL = os.getenv("AGENTVERSE_URL", "https://agentverse.ai").rstrip("/") + "/v1/storage"
 
 WELCOME = (
     "👋 I'm **Kagaz**. Send me any official notice or message: a traffic "
@@ -56,12 +62,15 @@ WELCOME = (
     "2. **Explain it** in plain English or Hindi\n"
     "3. **Draft your reply** and the exact steps\n"
     "4. **Remind you** before the deadline, and get an expert review if needed\n\n"
-    "Paste the notice text now. Add *\"in Hindi\"* for a Hindi explanation."
+    "Paste the notice text, or **upload a screenshot or photo** of it. "
+    "Add *\"in Hindi\"* for a Hindi explanation."
 )
 DISCLAIMER = "_General information, not legal advice. Always confirm on the official portal._"
 
 PROSE_ACTIONS = [
     (("pay rs", "pay and request", "pay_expert", "confirm payment"), "pay_expert"),
+    (("report this scam", "report scam", "scam report", "warn my family", "report_scam"),
+     "report_scam"),
     (("expert",), "expert"),
     (("reminder", "remind"), "remind"),
     (("looks right", "proceed", "prepare my reply", "official way", "explain"), "proceed"),
@@ -119,6 +128,26 @@ def detect_language(text: str, current: str = "en") -> str:
 def strip_language_request(text: str) -> str:
     return re.sub(r"\b(?:explain\s+)?(?:in|into)\s+(?:hindi|english)\b", "", text,
                   flags=re.IGNORECASE).strip()
+
+
+def download_image(item: ResourceContent, identity: Identity) -> tuple[bytes, str]:
+    """Fetch an image the user uploaded in ASI:One (Agentverse storage)."""
+    res = item.resource[0] if isinstance(item.resource, list) else item.resource
+    mime = (res.metadata or {}).get("mime_type", "")
+    try:
+        from uagents_core.storage import ExternalStorage
+
+        store = ExternalStorage(identity=identity, storage_url=STORAGE_URL)
+        data = store.download(str(item.resource_id))
+        return base64.b64decode(data["contents"]), data.get("mime_type") or mime
+    except Exception as err:
+        if not res.uri.startswith(("https://", "http://")):
+            raise RuntimeError(f"storage download failed: {err}") from err
+    import requests
+
+    resp = requests.get(res.uri, timeout=15)
+    resp.raise_for_status()
+    return resp.content, resp.headers.get("content-type", mime)
 
 
 # ---------------------------------------------------------------- agent
@@ -311,16 +340,74 @@ def build(mailbox: bool | None = None):
             "with the Expert agent through the Payment Protocol; the review will appear "
             "here in a moment."))
 
+    # -------------------------------------------------- images and scam reports
+
+    coordinator_identity = Identity.from_seed(config.seed_for("coordinator"), 0)
+
+    async def analyse_image(ctx: Context, sender: str, item: ResourceContent,
+                            user_text: str, state: dict):
+        data, mime = await asyncio.to_thread(download_image, item, coordinator_identity)
+        mime = (mime or "image/png").split(";")[0].strip().lower()
+        if mime not in ocr.IMAGE_TYPES and not mime.startswith("image/"):
+            await ctx.send(sender, cards.text_message(
+                "I can read **photos and screenshots** (PNG/JPG). For a PDF, please "
+                "paste its text or send a screenshot of the page."))
+            return
+        text, method = await asyncio.to_thread(ocr.image_to_text, data, mime)
+        if len(text) < ocr.MIN_USEFUL_CHARS:
+            await ctx.send(sender, cards.text_message(
+                "I couldn't read enough text in that image. Please send a clearer, "
+                "straight photo, or paste the text."))
+            return
+        preview = text if len(text) <= 400 else text[:400] + " …"
+        how = "OCR" if method == "ocr" else "ASI:One vision"
+        await ctx.send(sender, cards.text_message(
+            f"📷 I read this from your image ({how}):\n> " + preview.replace("\n", "\n> ")
+            + "\n\nChecking it now…"))
+        await analyse_notice(ctx, sender, text, state)
+
+    async def send_report_pack(ctx: Context, sender: str, state: dict):
+        nf = NoticeFields.from_dict(state["fields"])
+        rep = state.get("report", {})
+        complaint = scam_report.complaint_text(nf, rep)
+        warning = scam_report.family_warning(nf, rep)
+        await ctx.send(sender, cards.text_message(
+            "🛡️ **Your scam report pack**\n\n"
+            "**1. File a complaint** at https://cybercrime.gov.in (\"Report other cyber crime\"), "
+            "or call **1930** and read this out. If you already lost money, call 1930 "
+            "within the first hour; banks can freeze the money.\n"
+            "```\n" + complaint + "\n```\n"
+            "**2. Warn your family.** Forward this on WhatsApp:\n"
+            "```\n" + warning + "\n```\n"
+            "**3. Block the sender** and report it as spam. On Sanchar Saathi "
+            "(https://sancharsaathi.gov.in, Chakshu) you can report fraud calls and SMS.\n\n"
+            + DISCLAIMER))
+
     # -------------------------------------------------- chat protocol
 
     @chat.on_message(ChatMessage)
     async def on_chat(ctx: Context, sender: str, msg: ChatMessage):
         await ctx.send(sender, ChatAcknowledgement(timestamp=datetime.now(timezone.utc),
                                                    acknowledged_msg_id=msg.msg_id))
+        if any(isinstance(c, StartSessionContent) for c in msg.content):
+            # Tell ASI:One this agent accepts image uploads.
+            await ctx.send(sender, ChatMessage(
+                timestamp=datetime.now(timezone.utc), msg_id=uuid4(),
+                content=[MetadataContent(type="metadata", metadata={"attachments": "true"})]))
         text = " ".join(c.text for c in msg.content if isinstance(c, TextContent)).strip()
+        resources = [c for c in msg.content if isinstance(c, ResourceContent)]
         state = load(ctx, sender)
         state["language"] = detect_language(text, state.get("language", "en"))
         save(ctx, sender, state)
+
+        if resources:
+            try:
+                await analyse_image(ctx, sender, resources[0], text, state)
+            except Exception:
+                ctx.logger.exception("Image handling failed")
+                await ctx.send(sender, cards.text_message(
+                    "Sorry, I couldn't open that image. Please try again, or paste the text."))
+            return
 
         selection = parse_selection(text) if state.get("stage") else {}
         act = selection.get("action")
@@ -338,6 +425,8 @@ def build(mailbox: bool | None = None):
                 await set_reminders(ctx, sender, state)
             elif act == "expert" and state.get("fields"):
                 await offer_expert(ctx, sender, state)
+            elif act == "report_scam" and state.get("fields"):
+                await send_report_pack(ctx, sender, state)
             elif act == "pay_expert" and state.get("stage") == "confirm_payment":
                 await request_expert(ctx, sender, state)
             elif act in {"cancel", "done"} and state.get("stage"):

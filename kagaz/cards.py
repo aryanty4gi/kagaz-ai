@@ -111,8 +111,10 @@ def scam_alert(fields: dict, report: dict) -> dict:
                 {"type": "divider"},
                 {"type": "heading", "value": "What to do now", "level": 3},
                 *advice_nodes,
+                {"type": "button", "label": "Report this scam + warn my family",
+                 "primary": True, "action": {"selection": {"action": "report_scam"}}},
                 {"type": "button", "label": "Show me how to check this the official way",
-                 "primary": True, "action": {"selection": {"action": "proceed"}}},
+                 "action": {"selection": {"action": "proceed"}}},
             ],
         }
     }
