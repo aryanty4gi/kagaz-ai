@@ -312,3 +312,38 @@ def test_hindi_scam_sms_is_caught():
     fields = reader.extract(text)
     assert fields.notice_type == "electricity_disconnection"
     assert verify.verify(fields, use_llm=False).verdict == "SCAM"
+
+
+def test_next_steps_drops_used_buttons_and_speaks_hindi():
+    from kagaz import cards
+    expl = {"title": "Electricity disconnection notice", "escalate": False}
+    plan = {"deadline": "2099-11-05", "reminders": ["2099-10-29"]}
+    first = cards.next_steps(expl, plan, "99", False)
+    assert [c["selection"]["action"] for c in first["ctas"]] == ["remind", "expert", "done"]
+    after = cards.next_steps(expl, plan, "99", False, used=["remind"])
+    assert [c["selection"]["action"] for c in after["ctas"]] == ["expert", "done"]
+    assert any(c.get("primary") for c in after["ctas"])
+    hi = cards.next_steps(expl, plan, "99", False, language="hi")
+    assert hi["title"] == "आपके अगले कदम"
+    assert "Set deadline reminders" in hi["ctas"][0]["label"]  # still matches prose clicks
+    report = cards.after_report({"title": "Traffic e-challan"})
+    assert [c["selection"]["action"] for c in report["ctas"]] == ["proceed", "done"]
+
+
+def test_hindi_explanation_translates_steps(monkeypatch):
+    from kagaz import llm
+    from kagaz.core import rules
+
+    def fake(system, user, max_tokens=1200):
+        if "Translate each numbered line" in system:
+            n = len(user.splitlines())
+            return "\n".join(f"{i}. हिंदी कदम {i}" for i in range(1, n + 1))
+        return "हिंदी में समझाया गया।"
+
+    monkeypatch.setattr(llm, "complete", fake)
+    fields = reader.extract(load("03_income_tax_143_1.txt"))
+    out = rules.explain(fields, "hi")
+    assert out["steps"] and all(s.startswith("हिंदी कदम") for s in out["steps"])
+    # A broken translation falls back to the English steps.
+    monkeypatch.setattr(llm, "complete", lambda *a, **k: "oops")
+    assert rules.translate_lines(["Pay on incometax.gov.in"]) == ["Pay on incometax.gov.in"]

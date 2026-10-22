@@ -134,7 +134,9 @@ def build_plan(fields: NoticeFields, explanation: dict, user_name: str = "") -> 
 
     steps = list(explanation.get("steps", []))
     if explanation.get("escalate"):
-        steps.append("Get the draft reviewed by an expert before sending it.")
+        steps.append("भेजने से पहले ड्राफ्ट किसी विशेषज्ञ से जँचवा लें।"
+                     if explanation.get("language") == "hi"
+                     else "Get the draft reviewed by an expert before sending it.")
 
     return {
         "draft": draft,

@@ -4,7 +4,9 @@ The knowledge-base entry is retrieved first and handed to ASI:One as the
 only allowed source, so the explanation stays tied to real rules.
 """
 
+import contextvars
 import re
+from concurrent.futures import ThreadPoolExecutor
 
 from kagaz import llm
 from kagaz.core import knowledge
@@ -48,7 +50,24 @@ def explain(fields: NoticeFields, language: str = "en") -> dict:
         f"Deadline: {fields.deadline or 'not stated'}\nSummary: {fields.summary}\n"
         f"Text: {fields.raw_text[:2500]}"
     )
-    plain = llm.complete(system, source, max_tokens=350)
+    steps = list(kb["steps"])
+    if language == "hi":
+        # Translate the steps in parallel with the explanation, so a Hindi
+        # answer is Hindi all the way through without doubling the wait.
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            # Copy the context so the "LLM offline" flag still applies in the threads.
+            plain_job = pool.submit(contextvars.copy_context().run,
+                                    llm.complete, system, source, 350)
+            steps_job = pool.submit(contextvars.copy_context().run, translate_lines,
+                                    steps + ([reason] if reason else []))
+            plain = plain_job.result()
+            translated = steps_job.result()
+        if reason:
+            reason = translated[-1]
+            translated = translated[:-1]
+        steps = translated
+    else:
+        plain = llm.complete(system, source, max_tokens=350)
     if not plain:
         plain = f"{kb['what_it_means']} {kb['deadline_rule']}"
         if language == "hi":
@@ -60,7 +79,7 @@ def explain(fields: NoticeFields, language: str = "en") -> dict:
         "what_it_means": kb["what_it_means"],
         "deadline_rule": kb["deadline_rule"],
         "days_left": remaining,
-        "steps": kb["steps"],
+        "steps": steps,
         "rights": kb["rights"],
         "portals": kb["official_portals"],
         "escalate": escalate,
@@ -68,3 +87,28 @@ def explain(fields: NoticeFields, language: str = "en") -> dict:
         "plain_explanation": plain,
         "language": language,
     }
+
+
+def translate_lines(lines: list[str]) -> list[str]:
+    """Translate short lines to Hindi, keeping website names in English.
+    Returns the original lines if the LLM is unavailable or the answer
+    doesn't line up one-to-one."""
+    if not lines:
+        return lines
+    system = (
+        "Translate each numbered line into simple Hindi (Devanagari script). Keep "
+        "website addresses, form names, section numbers and amounts exactly as they "
+        "are. Reply with the same numbering, one line each, nothing else."
+    )
+    user = "\n".join(f"{i}. {line}" for i, line in enumerate(lines, 1))
+    out = llm.complete(system, user, max_tokens=900)
+    if not out:
+        return lines
+    got = {}
+    for row in out.splitlines():
+        m = re.match(r"\s*(\d+)[.)]\s*(.+)", row)
+        if m:
+            got[int(m.group(1))] = m.group(2).strip()
+    if sorted(got) != list(range(1, len(lines) + 1)):
+        return lines
+    return [got[i] for i in range(1, len(lines) + 1)]

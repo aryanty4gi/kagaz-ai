@@ -139,28 +139,72 @@ def edit_form(fields: dict) -> dict:
     }
 
 
-def next_steps(explanation: dict, plan: dict, fee_inr: str, scam: bool) -> dict:
-    rows = [{"label": "What it is", "value": explanation["title"]}]
+HI = {
+    "Your next steps": "आपके अगले कदम",
+    "What it is": "यह क्या है",
+    "Deadline": "आख़िरी तारीख़",
+    "days left": "दिन बाकी",
+    "Reminders I can set": "रिमाइंडर की तारीख़ें",
+    "Reminders set": "रिमाइंडर सेट हैं",
+    "Expert advised": "विशेषज्ञ की सलाह ज़रूरी",
+    "Set deadline reminders": "रिमाइंडर सेट करें (Set deadline reminders)",
+    "Get expert review": "विशेषज्ञ से जँचवाएं (Get expert review)",
+    "I'm done": "हो गया (I'm done)",
+    "What next?": "आगे क्या करें?",
+}
+
+
+def _t(text: str, language: str) -> str:
+    return HI.get(text, text) if language == "hi" else text
+
+
+def next_steps(explanation: dict, plan: dict, fee_inr: str, scam: bool,
+               used: list | None = None, language: str = "en") -> dict:
+    """Next-steps card. ASI:One lets a card be clicked only once, so after each
+    action the coordinator sends this card again without the used buttons."""
+    used = set(used or [])
+    rows = [{"label": _t("What it is", language), "value": explanation["title"]}]
     if plan.get("deadline"):
         left = days_left(plan["deadline"])
-        rows.append({"label": "Deadline",
-                     "value": f"{plan['deadline']}" + (f" ({left} days left)" if left is not None else "")})
+        rows.append({"label": _t("Deadline", language),
+                     "value": f"{plan['deadline']}"
+                     + (f" ({left} {_t('days left', language)})" if left is not None else "")})
     if plan.get("reminders"):
-        rows.append({"label": "Reminders I can set", "value": ", ".join(plan["reminders"])})
-    if explanation.get("escalate"):
-        rows.append({"label": "Expert advised", "value": explanation["escalate_reason"]})
+        label = "Reminders set" if "remind" in used else "Reminders I can set"
+        rows.append({"label": _t(label, language), "value": ", ".join(plan["reminders"])})
+    if explanation.get("escalate") and "expert" not in used:
+        rows.append({"label": _t("Expert advised", language),
+                     "value": explanation["escalate_reason"]})
     ctas = []
-    if plan.get("reminders"):
-        ctas.append({"label": "Set deadline reminders", "selection": {"action": "remind"},
+    if plan.get("reminders") and "remind" not in used:
+        ctas.append({"label": _t("Set deadline reminders", language),
+                     "selection": {"action": "remind"},
                      "primary": not explanation.get("escalate")})
-    if not scam:
-        ctas.append({"label": f"Get expert review (Rs {fee_inr})",
+    if not scam and "expert" not in used:
+        ctas.append({"label": f"{_t('Get expert review', language)} (Rs {fee_inr})",
                      "selection": {"action": "expert"},
                      "primary": bool(explanation.get("escalate"))})
-    ctas.append({"label": "I'm done", "selection": {"action": "done"}})
+    ctas.append({"label": _t("I'm done", language), "selection": {"action": "done"}})
     if not any(c.get("primary") for c in ctas):
         ctas[0]["primary"] = True
-    return {"title": "Your next steps", "summary_rows": rows, "ctas": ctas}
+    title = "Your next steps" if not used else "What next?"
+    return {"title": _t(title, language), "summary_rows": rows, "ctas": ctas}
+
+
+def after_report(fields: dict) -> dict:
+    """Follow-up card after the scam report pack (the scam card is now used up)."""
+    return {
+        "title": "What next?",
+        "summary_rows": [
+            {"label": "Claimed to be", "value": fields.get("title") or "An official notice"},
+            {"label": "Report pack", "value": "Sent above - copy and file it"},
+        ],
+        "ctas": [
+            {"label": "Show me how to check this the official way",
+             "selection": {"action": "proceed"}, "primary": True},
+            {"label": "I'm done", "selection": {"action": "done"}},
+        ],
+    }
 
 
 def confirm_payment(fields: dict, fee_inr: str, fee_amount: str, currency: str,

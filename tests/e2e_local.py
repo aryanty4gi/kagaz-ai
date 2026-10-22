@@ -113,18 +113,20 @@ user = Agent(name="test_user", seed="kagaz-e2e-test-user", port=8199,
 script = [
     ("send", SAMPLES["01_fake_echallan_sms.txt"]),
     ("expect_card", "custom", {"action": "report_scam"}),
-    ("expect_text", "Your scam report pack", {"action": "proceed"}),
+    # Cards are single-use in ASI:One, so each follow-up carries a fresh card
+    # with only the buttons still left (4th item = exact button actions).
+    ("expect_text", "Your scam report pack", {"action": "proceed"}, {"proceed", "done"}),
     ("expect_card", "detail", None),
     ("send", SAMPLES["04_electricity_disconnection.txt"]),
     ("expect_card", "review", {"action": "proceed"}),
     ("expect_card", "detail", {"action": "remind"}),
-    ("expect_text", "Done. I'll message you", {"action": "expert"}),
+    ("expect_text", "Done. I'll message you", {"action": "expert"}, {"expert", "done"}),
     ("expect_card", "review", {"action": "pay_expert"}),
     *([("expect_card", "review", {"action": "check_payment"}),
        ("expect_text", "Payment of Rs 99 received", None)] if FAKE_STRIPE else
       [("expect_text", "Payment of Rs 99 recorded", None)]),
     ("expect_text", "expert marketplace", None),
-    ("expect_text", "Expert review** from Test CA, CA (verified", None),
+    ("expect_text", "Expert review** from Test CA, CA (verified", None, {"done"}),
     ("send_image", "screenshot.png"),
     ("expect_text", "I read this from your image", None),
     ("expect_card", "custom", None),
@@ -189,6 +191,12 @@ async def on_reply(ctx: Context, sender: str, msg: ChatMessage):
     expected = script[step["i"]]
     ok = (expected[0] == "expect_card" and kind == expected[1]) or \
          (expected[0] == "expect_text" and expected[1] in text)
+    if ok and len(expected) > 3:
+        payload = json.loads(card["card_payload"]) if card else {}
+        actions = {c["selection"]["action"] for c in payload.get("ctas", [])}
+        ok = actions == expected[3]
+        if not ok:
+            print(f"!! step {step['i']} buttons {actions}, expected {expected[3]}")
     if not ok:
         print(f"!! step {step['i']} expected {expected[:2]}, got kind={kind}")
         return

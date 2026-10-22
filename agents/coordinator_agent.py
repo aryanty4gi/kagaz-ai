@@ -65,6 +65,7 @@ WELCOME = (
     "Add *\"in Hindi\"* for a Hindi explanation."
 )
 DISCLAIMER = "_General information, not legal advice. Always confirm on the official portal._"
+DISCLAIMER_HI = "_यह सामान्य जानकारी है, क़ानूनी सलाह नहीं। हमेशा सरकारी पोर्टल पर पुष्टि करें।_"
 
 PROSE_ACTIONS = [
     (("i've paid", "i have paid", "check payment", "check_payment"), "check_payment"),
@@ -273,8 +274,9 @@ def build(mailbox: bool | None = None):
         plan = json.loads(acted.plan_json)
 
         scam = state.get("report", {}).get("verdict") == "SCAM"
-        state.update(stage="plan", explanation=explanation, plan=plan)
+        state.update(stage="plan", explanation=explanation, plan=plan, used=[])
         save(ctx, sender, state)
+        hi = language == "hi"
 
         parts = []
         if scam:
@@ -284,18 +286,30 @@ def build(mailbox: bool | None = None):
             law = f" ({explanation['law']})" if explanation.get("law") else ""
             parts.append(f"**{explanation['title']}**{law}")
         parts.append(explanation["plain_explanation"])
-        parts.append("**What to do**\n" + "\n".join(
+        parts.append(("**क्या करें**" if hi else "**What to do**") + "\n" + "\n".join(
             f"{i}. {s}" for i, s in enumerate(plan["steps"], 1)))
         if not scam:
-            parts.append("**Your draft reply** (fill in the [brackets]):\n```\n"
+            parts.append(("**आपके जवाब का ड्राफ्ट** (अंग्रेज़ी में, क्योंकि दफ़्तर में यही भेजा "
+                          "जाता है; [ब्रैकेट] वाली जगह भरें):\n```\n" if hi else
+                          "**Your draft reply** (fill in the [brackets]):\n```\n")
                          + plan["draft"].strip() + "\n```")
         if plan.get("portals"):
-            parts.append("**Official links:** " + ", ".join(plan["portals"]))
-        parts.append(DISCLAIMER + fallback_note(degraded))
+            parts.append(("**सरकारी लिंक:** " if hi else "**Official links:** ")
+                         + ", ".join(plan["portals"]))
+        parts.append((DISCLAIMER_HI if hi else DISCLAIMER) + fallback_note(degraded))
 
         await ctx.send(sender, cards.card_message(
-            "\n\n".join(parts), "detail",
-            cards.next_steps(explanation, plan, config.EXPERT_FEE_INR, scam)))
+            "\n\n".join(parts), "detail", next_card(state)))
+
+    def next_card(state: dict) -> dict:
+        return cards.next_steps(state["explanation"], state["plan"], config.EXPERT_FEE_INR,
+                                state.get("report", {}).get("verdict") == "SCAM",
+                                used=state.get("used", []),
+                                language=state.get("language", "en"))
+
+    def mark_used(ctx: Context, sender: str, state: dict, action_name: str):
+        state["used"] = sorted(set(state.get("used", [])) | {action_name})
+        save(ctx, sender, state)
 
     async def set_reminders(ctx: Context, sender: str, state: dict):
         plan = state.get("plan", {})
@@ -311,9 +325,11 @@ def build(mailbox: bool | None = None):
             reminders.append({"to": sender, "date": d, "title": title,
                               "deadline": plan.get("deadline", ""), "sent": False})
         ctx.storage.set("reminders", reminders)
-        await ctx.send(sender, cards.text_message(
+        mark_used(ctx, sender, state, "remind")
+        # The clicked card is now locked by ASI:One, so offer what's left on a new one.
+        await ctx.send(sender, cards.card_message(
             f"⏰ Done. I'll message you here on {', '.join(dates)} about **{title}** "
-            f"(deadline {plan.get('deadline')})."))
+            f"(deadline {plan.get('deadline')}).", "detail", next_card(state)))
 
     async def offer_expert(ctx: Context, sender: str, state: dict):
         state["stage"] = "confirm_payment"
@@ -444,7 +460,7 @@ def build(mailbox: bool | None = None):
         rep = state.get("report", {})
         complaint = scam_report.complaint_text(nf, rep)
         warning = scam_report.family_warning(nf, rep)
-        await ctx.send(sender, cards.text_message(
+        await ctx.send(sender, cards.card_message(
             "🛡️ **Your scam report pack**\n\n"
             "**1. File a complaint** at https://cybercrime.gov.in (\"Report other cyber crime\"), "
             "or call **1930** and read this out. If you already lost money, call 1930 "
@@ -454,7 +470,7 @@ def build(mailbox: bool | None = None):
             "```\n" + warning + "\n```\n"
             "**3. Block the sender** and report it as spam. On Sanchar Saathi "
             "(https://sancharsaathi.gov.in, Chakshu) you can report fraud calls and SMS.\n\n"
-            + DISCLAIMER))
+            + DISCLAIMER, "detail", cards.after_report(state["fields"])))
 
     # -------------------------------------------------- chat protocol
 
@@ -505,6 +521,12 @@ def build(mailbox: bool | None = None):
             elif act == "check_payment" and state.get("stage") == "awaiting_payment":
                 await confirm_paid(ctx, sender, state, selection.get("case_id")
                                    or state.get("case_id", ""))
+            elif act == "cancel" and state.get("stage") == "confirm_payment" \
+                    and state.get("plan"):
+                state["stage"] = "plan"
+                save(ctx, sender, state)
+                await ctx.send(sender, cards.card_message(
+                    "No problem. Anything else?", "detail", next_card(state)))
             elif act in {"cancel", "done"} and state.get("stage"):
                 save(ctx, sender, {"language": state.get("language", "en")})
                 await ctx.send(sender, cards.text_message(
@@ -541,7 +563,11 @@ def build(mailbox: bool | None = None):
         state = load(ctx, sender)
         state["stage"] = "plan"
         save(ctx, sender, state)
-        await ctx.send(sender, cards.text_message("No problem, nothing was charged."))
+        if state.get("plan") and state.get("explanation"):
+            await ctx.send(sender, cards.card_message(
+                "No problem, nothing was charged.", "detail", next_card(state)))
+        else:
+            await ctx.send(sender, cards.text_message("No problem, nothing was charged."))
 
     @expert_proto.on_message(ExpertJobResult)
     async def on_review(ctx: Context, sender: str, msg: ExpertJobResult):
@@ -558,8 +584,15 @@ def build(mailbox: bool | None = None):
         receipt = (f"You paid Rs {config.EXPERT_FEE_INR} ({pay.get('method', 'demo')} "
                    f"`{str(pay.get('tx', 'n/a'))[-12:]}`) · expert paid {msg.payout or 'n/a'} "
                    f"agent-to-agent (`{msg.tx or 'n/a'}`)")
-        await ctx.send(case["user"], cards.text_message(
-            f"🧑‍⚖️ **Expert review** from {msg.reviewer}\n\n{msg.review_text}\n\n{receipt}"))
+        text = f"🧑‍⚖️ **Expert review** from {msg.reviewer}\n\n{msg.review_text}\n\n{receipt}"
+        state = load(ctx, case["user"])
+        if state.get("plan") and state.get("explanation"):
+            mark_used(ctx, case["user"], state, "expert")
+            state["stage"] = "plan"
+            save(ctx, case["user"], state)
+            await ctx.send(case["user"], cards.card_message(text, "detail", next_card(state)))
+        else:
+            await ctx.send(case["user"], cards.text_message(text))
 
     # -------------------------------------------------- proactive reminders
 
