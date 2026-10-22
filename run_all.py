@@ -18,7 +18,7 @@ import time
 import urllib.request
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-AGENTS = ["coordinator", "reader", "verify", "rules", "action", "expert"]
+AGENTS = ["coordinator", "reader", "verify", "rules", "action", "expert", "marketplace"]
 
 
 def pump(name: str, proc: subprocess.Popen):

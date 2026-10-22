@@ -22,7 +22,7 @@ AMOUNT_RE = re.compile(
 )
 DAYS_RE = re.compile(r"within\s+(\d{1,3})\s+(?:clear\s+)?days", re.IGNORECASE)
 REF_RE = re.compile(
-    r"(?:challan|reference|ref|din|notice|document|case|consumer|account|loan)"
+    r"(?:challan|reference|ref|din|notice|document|case|consumer|account|loan|cnr|admission|gstin)"
     r"\s*(?:no\.?|number|id|#)?\s*[:\-]?\s*((?=[A-Z/\-]*\d)[A-Z0-9][A-Z0-9/\-]{5,})",
     re.IGNORECASE,
 )

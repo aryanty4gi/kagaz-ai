@@ -1,0 +1,11 @@
+GOVERNMENT OF UTTAR PRADESH - COMMERCIAL TAX DEPARTMENT
+FORM GST ASMT-10
+Notice for intimating discrepancies in the return after scrutiny
+Reference No.: ZD0910261234567  Date: 10/10/2026
+GSTIN: 09ABCDE1234F1Z5  Name: Sharma Traders
+Tax Period: April 2025 - March 2026
+On scrutiny of your returns, the following discrepancy has been noticed: Input Tax Credit
+claimed in GSTR-3B exceeds the credit available in GSTR-2B by Rs 48,600.
+You are directed to explain the reasons for the discrepancy in FORM GST ASMT-11 within
+30 days of this notice, failing which proceedings may be initiated under the CGST Act.
+View this notice at www.gst.gov.in under Services > User Services > View Notices and Orders.

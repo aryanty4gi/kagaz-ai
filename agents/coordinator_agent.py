@@ -40,17 +40,16 @@ from uagents_core.contrib.protocols.payment import (
 
 from agents.common import make_agent
 from kagaz import cards, config, llm
+from kagaz import payments as gateway
 from kagaz.core import action, knowledge, ocr, reader, report as scam_report, rules, verify
 from kagaz.core.reader import NoticeFields
 from kagaz.messages import (
-    ActionRequest, ActionResult, ExpertReviewRequest, ExpertReviewResult,
+    ActionRequest, ActionResult, ExpertJobRequest, ExpertJobResult,
     ReadRequest, ReadResult, RulesRequest, RulesResult, VerifyRequest, VerifyResult,
 )
 
 SPECIALIST_TIMEOUT = int(os.getenv("KAGAZ_SPECIALIST_TIMEOUT", "30"))
 REMINDER_CHECK_SECONDS = float(os.getenv("KAGAZ_REMINDER_INTERVAL", "3600"))
-REAL_FET = os.getenv("KAGAZ_REAL_FET", "false").lower() == "true"
-MAX_EXPERT_FEE = float(os.getenv("KAGAZ_MAX_EXPERT_FEE", "1.0"))
 STORAGE_URL = os.getenv("AGENTVERSE_URL", "https://agentverse.ai").rstrip("/") + "/v1/storage"
 
 WELCOME = (
@@ -68,6 +67,7 @@ WELCOME = (
 DISCLAIMER = "_General information, not legal advice. Always confirm on the official portal._"
 
 PROSE_ACTIONS = [
+    (("i've paid", "i have paid", "check payment", "check_payment"), "check_payment"),
     (("pay rs", "pay and request", "pay_expert", "confirm payment"), "pay_expert"),
     (("report this scam", "report scam", "scam report", "warn my family", "report_scam"),
      "report_scam"),
@@ -161,8 +161,10 @@ def build(mailbox: bool | None = None):
         mailbox,
     )
     chat = Protocol(spec=chat_protocol_spec)
-    payments = Protocol(spec=payment_protocol_spec, role="buyer")
-    expert_proto = Protocol(name="KagazExpertClient", version="1.0.0")
+    # Coordinator sells expert reviews to the user (Stripe gateway or demo);
+    # the marketplace agent pays the experts.
+    payments = Protocol(spec=payment_protocol_spec, role="seller")
+    expert_proto = Protocol(name="KagazExpertClient", version="2.0.0")
 
     # -------------------------------------------------- specialist calls
 
@@ -320,25 +322,96 @@ def build(mailbox: bool | None = None):
             "An expert can check your draft before you send it.",
             "review",
             cards.confirm_payment(state.get("fields", {}), config.EXPERT_FEE_INR,
-                                  config.EXPERT_FEE_AMOUNT, config.EXPERT_FEE_CURRENCY)))
+                                  config.EXPERT_FEE_AMOUNT, config.EXPERT_FEE_CURRENCY,
+                                  live_gateway=gateway.enabled())))
 
     async def request_expert(ctx: Context, sender: str, state: dict):
+        """User clicked Pay: take payment through the gateway, then hire an expert."""
         case_id = state.get("case_id") or uuid4().hex[:10]
-        ctx.storage.set(f"case:{case_id}", {"user": sender, "paid": False})
-        draft = state.get("plan", {}).get("draft", "")
-        status = await ctx.send(config.address_for("expert"), ExpertReviewRequest(
-            case_id=case_id, fields_json=json.dumps(state.get("fields", {})), draft_text=draft))
-        if getattr(status, "status", None) and str(status.status).lower().endswith("failed"):
+        state["case_id"] = case_id
+        title = state.get("fields", {}).get("title") or "Official notice"
+        if not gateway.enabled():
+            tx = gateway.demo_transaction_id()
             await ctx.send(sender, cards.text_message(
-                "The Expert Desk is offline right now, so you have **not** been charged. "
-                "Please try again in a few minutes."))
+                f"💳 Payment of Rs {config.EXPERT_FEE_INR} recorded (`{tx}`, demo mode: "
+                "add Stripe keys for real card/UPI payments)."))
+            await hire_expert(ctx, sender, state, {"method": "demo", "tx": tx})
+            return
+        try:
+            checkout = await asyncio.to_thread(
+                gateway.create_checkout, case_id, sender, config.EXPERT_FEE_INR,
+                f"Expert review: {title}")
+        except Exception as err:
+            ctx.logger.exception("Stripe checkout failed")
+            await ctx.send(sender, cards.text_message(
+                f"The payment page couldn't be opened ({type(err).__name__}). You have "
+                "**not** been charged. Please try again in a minute."))
+            return
+        ctx.storage.set(f"pay:{case_id}", {"user": sender, "sessions": checkout["session_ids"],
+                                           "paid": False})
+        state["stage"] = "awaiting_payment"
+        save(ctx, sender, state)
+        # Payment Protocol request with a Stripe payload ASI:One can render.
+        await ctx.send(sender, RequestPayment(
+            accepted_funds=[Funds(currency=gateway.CURRENCY.upper(),
+                                  amount=f"{float(config.EXPERT_FEE_INR):.2f}",
+                                  payment_method="stripe")],
+            recipient=agent.address, deadline_seconds=1800, reference=case_id,
+            description=f"Kagaz expert review: {title}",
+            metadata={"stripe": json.dumps(checkout["stripe"]), "service": "kagaz_expert_review"}))
+        link = (f"\n\nIf the payment box doesn't appear, pay here: {checkout['hosted_url']}"
+                if checkout["hosted_url"] else "")
+        await ctx.send(sender, cards.card_message(
+            f"💳 Pay **Rs {config.EXPERT_FEE_INR}** securely by card or UPI (Stripe)." + link,
+            "review", cards.payment_check(case_id, config.EXPERT_FEE_INR)))
+
+    async def confirm_paid(ctx: Context, sender: str, state: dict, case_id: str):
+        pay = ctx.storage.get(f"pay:{case_id}")
+        if not pay or pay["user"] != sender:
+            await ctx.send(sender, cards.text_message("I couldn't find that payment."))
+            return
+        if pay["paid"]:
+            return
+        sid, intent = await asyncio.to_thread(gateway.paid_session, pay["sessions"])
+        if not sid:
+            await ctx.send(sender, cards.card_message(
+                "I don't see the payment yet. Finish checkout, then tap the button again.",
+                "review", cards.payment_check(case_id, config.EXPERT_FEE_INR)))
+            return
+        pay.update(paid=True, session=sid, intent=intent)
+        ctx.storage.set(f"pay:{case_id}", pay)
+        await ctx.send(sender, CompletePayment(transaction_id=sid))
+        await ctx.send(sender, cards.text_message(
+            f"✅ Payment of Rs {config.EXPERT_FEE_INR} received (Stripe `{sid[-10:]}`)."))
+        await hire_expert(ctx, sender, state, {"method": "stripe", "tx": sid, "intent": intent})
+
+    async def hire_expert(ctx: Context, sender: str, state: dict, payment: dict):
+        case_id = state["case_id"]
+        ctx.storage.set(f"case:{case_id}", {"user": sender, "payment": payment})
+        fields = state.get("fields", {})
+        status = await ctx.send(config.address_for("marketplace"), ExpertJobRequest(
+            case_id=case_id, notice_type=fields.get("notice_type", "unknown"),
+            fields_json=json.dumps(fields), draft_text=state.get("plan", {}).get("draft", ""),
+            budget=config.EXPERT_FEE_AMOUNT))
+        if getattr(status, "status", None) and str(status.status).lower().endswith("failed"):
+            await refund_user(ctx, case_id, "The expert marketplace is offline right now.")
             return
         state["stage"] = "awaiting_expert"
         save(ctx, sender, state)
         await ctx.send(sender, cards.text_message(
-            f"💳 Sent to the Expert Desk (case `{case_id}`). My agent is settling the fee "
-            "with the Expert agent through the Payment Protocol; the review will appear "
-            "here in a moment."))
+            f"🧑‍⚖️ Sent to the Kagaz expert marketplace (case `{case_id}`). It picks a "
+            "verified CA or lawyer for this notice type and pays them per job through "
+            "the Payment Protocol. Your review will appear here."))
+
+    async def refund_user(ctx: Context, case_id: str, why: str):
+        case = ctx.storage.get(f"case:{case_id}") or {}
+        payment = case.get("payment", {})
+        refunded = await asyncio.to_thread(gateway.refund, payment.get("intent", ""))
+        note = ("Your payment has been **refunded**." if refunded else
+                "You have not been charged." if payment.get("method") == "demo" else
+                "A refund will be issued.")
+        if case.get("user"):
+            await ctx.send(case["user"], cards.text_message(f"{why} {note}"))
 
     # -------------------------------------------------- images and scam reports
 
@@ -429,6 +502,9 @@ def build(mailbox: bool | None = None):
                 await send_report_pack(ctx, sender, state)
             elif act == "pay_expert" and state.get("stage") == "confirm_payment":
                 await request_expert(ctx, sender, state)
+            elif act == "check_payment" and state.get("stage") == "awaiting_payment":
+                await confirm_paid(ctx, sender, state, selection.get("case_id")
+                                   or state.get("case_id", ""))
             elif act in {"cancel", "done"} and state.get("stage"):
                 save(ctx, sender, {"language": state.get("language", "en")})
                 await ctx.send(sender, cards.text_message(
@@ -448,63 +524,40 @@ def build(mailbox: bool | None = None):
     async def on_ack(ctx: Context, sender: str, msg: ChatAcknowledgement):
         pass
 
-    # -------------------------------------------------- payments (buyer)
+    # -------------------------------------------------- payments (seller to the user)
 
-    @payments.on_message(RequestPayment)
-    async def on_invoice(ctx: Context, sender: str, msg: RequestPayment):
-        case = ctx.storage.get(f"case:{msg.reference}")
-        if sender != config.address_for("expert") or not case:
-            await ctx.send(sender, RejectPayment(reason="No matching review request"))
+    @payments.on_message(CommitPayment)
+    async def on_user_commit(ctx: Context, sender: str, msg: CommitPayment):
+        """ASI:One's payment card reports a finished Stripe checkout."""
+        case_id = msg.reference or ""
+        if msg.funds.payment_method != "stripe" or not msg.transaction_id:
+            await ctx.send(sender, CancelPayment(transaction_id=msg.transaction_id,
+                                                 reason="Unsupported payment method"))
             return
-        funds = next((f for f in msg.accepted_funds
-                      if f.currency == config.EXPERT_FEE_CURRENCY), None)
-        if not funds or float(funds.amount) > MAX_EXPERT_FEE:
-            await ctx.send(sender, RejectPayment(reason="Fee above agreed budget"))
-            await ctx.send(case["user"], cards.text_message(
-                "The expert's fee didn't match the agreed price, so I declined it. "
-                "You have not been charged."))
+        await confirm_paid(ctx, sender, load(ctx, sender), case_id)
+
+    @payments.on_message(RejectPayment)
+    async def on_user_reject(ctx: Context, sender: str, msg: RejectPayment):
+        state = load(ctx, sender)
+        state["stage"] = "plan"
+        save(ctx, sender, state)
+        await ctx.send(sender, cards.text_message("No problem, nothing was charged."))
+
+    @expert_proto.on_message(ExpertJobResult)
+    async def on_review(ctx: Context, sender: str, msg: ExpertJobResult):
+        if sender != config.address_for("marketplace"):
             return
-        tx_id = f"demo-{uuid4().hex[:12]}"
-        if REAL_FET:
-            try:
-                amount_atto = int(float(funds.amount) * 10**18)
-                tx = await asyncio.to_thread(
-                    lambda: ctx.ledger.send_tokens(msg.recipient, amount_atto, "atestfet",
-                                                   agent.wallet).wait_to_complete())
-                tx_id = tx.tx_hash
-            except Exception as err:
-                ctx.logger.warning(f"FET transfer failed: {err}")
-                await ctx.send(sender, RejectPayment(reason="Transfer failed"))
-                await ctx.send(case["user"], cards.text_message(
-                    "The payment didn't go through, so you have not been charged."))
-                return
-        case["tx"] = tx_id
-        ctx.storage.set(f"case:{msg.reference}", case)
-        await ctx.send(sender, CommitPayment(
-            funds=Funds(amount=funds.amount, currency=funds.currency,
-                        payment_method=funds.payment_method),
-            recipient=msg.recipient, transaction_id=tx_id, reference=msg.reference,
-            description=msg.description, metadata={}))
-
-    @payments.on_message(CompletePayment)
-    async def on_paid(ctx: Context, sender: str, msg: CompletePayment):
-        ctx.logger.info(f"Expert confirmed payment {msg.transaction_id}")
-
-    @payments.on_message(CancelPayment)
-    async def on_cancelled(ctx: Context, sender: str, msg: CancelPayment):
-        ctx.logger.warning(f"Expert cancelled payment: {msg.reason}")
-
-    @expert_proto.on_message(ExpertReviewResult)
-    async def on_review(ctx: Context, sender: str, msg: ExpertReviewResult):
         case = ctx.storage.get(f"case:{msg.case_id}")
         if not case:
             return
         if not msg.ok:
-            await ctx.send(case["user"], cards.text_message(
-                "The expert couldn't complete the review. A refund would be issued in production."))
+            await refund_user(ctx, msg.case_id,
+                              f"The expert review couldn't be completed ({msg.error}).")
             return
-        receipt = (f"Paid {config.EXPERT_FEE_AMOUNT} {config.EXPERT_FEE_CURRENCY} "
-                   f"(Rs {config.EXPERT_FEE_INR}) · transaction `{case.get('tx', 'n/a')}`")
+        pay = case.get("payment", {})
+        receipt = (f"You paid Rs {config.EXPERT_FEE_INR} ({pay.get('method', 'demo')} "
+                   f"`{str(pay.get('tx', 'n/a'))[-12:]}`) · expert paid {msg.payout or 'n/a'} "
+                   f"agent-to-agent (`{msg.tx or 'n/a'}`)")
         await ctx.send(case["user"], cards.text_message(
             f"🧑‍⚖️ **Expert review** from {msg.reviewer}\n\n{msg.review_text}\n\n{receipt}"))
 

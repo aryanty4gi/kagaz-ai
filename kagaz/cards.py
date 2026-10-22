@@ -163,16 +163,34 @@ def next_steps(explanation: dict, plan: dict, fee_inr: str, scam: bool) -> dict:
     return {"title": "Your next steps", "summary_rows": rows, "ctas": ctas}
 
 
-def confirm_payment(fields: dict, fee_inr: str, fee_amount: str, currency: str) -> dict:
+def confirm_payment(fields: dict, fee_inr: str, fee_amount: str, currency: str,
+                    live_gateway: bool = False) -> dict:
     return {
         "title": "Confirm expert review",
         "summary_rows": [
             {"label": "Notice", "value": fields.get("title") or "Official notice"},
-            {"label": "Reviewer", "value": "Kagaz Expert Desk"},
-            {"label": "Fee", "value": f"Rs {fee_inr} (settled agent-to-agent as {fee_amount} {currency})"},
+            {"label": "Reviewer", "value": "A verified CA or lawyer from the Kagaz marketplace"},
+            {"label": "Fee", "value": f"Rs {fee_inr}"},
+            {"label": "Pay with", "value": "Card or UPI (Stripe)" if live_gateway
+             else "Demo payment (no money moves)"},
+            {"label": "Expert is paid", "value": f"Up to {fee_amount} {currency}, agent-to-agent, per job"},
             {"label": "You get", "value": "Draft check, missing documents, risks to watch"},
         ],
         "approve_cta": {"label": f"Pay Rs {fee_inr} and request review",
                         "selection": {"action": "pay_expert"}, "primary": True},
         "reject_cta": {"label": "Not now", "selection": {"action": "cancel"}},
+    }
+
+
+def payment_check(case_id: str, fee_inr: str) -> dict:
+    return {
+        "title": f"Pay Rs {fee_inr}",
+        "summary_rows": [
+            {"label": "Case", "value": case_id},
+            {"label": "Secure checkout", "value": "Stripe (card / UPI)"},
+        ],
+        "approve_cta": {"label": "I've paid - check now",
+                        "selection": {"action": "check_payment", "case_id": case_id},
+                        "primary": True},
+        "reject_cta": {"label": "Cancel", "selection": {"action": "cancel"}},
     }

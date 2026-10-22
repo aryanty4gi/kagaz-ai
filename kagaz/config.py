@@ -36,13 +36,36 @@ AGENTS = {
     "rules": {"name": "kagaz_rules", "port": 8103},
     "action": {"name": "kagaz_action", "port": 8104},
     "expert": {"name": "kagaz_expert", "port": 8105},
+    "marketplace": {"name": "kagaz_marketplace", "port": 8106},
 }
 
 
 def seed_for(role: str) -> str:
     env_key = f"KAGAZ_{role.upper()}_SEED"
-    return os.getenv(env_key, f"kagaz-ai-{role}-dev-seed-change-me")
+    if os.getenv(env_key):
+        return os.environ[env_key]
+    # Agents added later (e.g. the marketplace) derive a private seed from the
+    # coordinator's, so an existing deployment needs no new secret.
+    base = os.getenv("KAGAZ_COORDINATOR_SEED")
+    if base and role != "coordinator":
+        import hashlib
+
+        return hashlib.sha256(f"{base}:{role}".encode()).hexdigest()
+    return f"kagaz-ai-{role}-dev-seed-change-me"
 
 
 def address_for(role: str) -> str:
+    # An outside expert's machine doesn't have Kagaz's seeds, so it is told the
+    # marketplace address directly (KAGAZ_MARKETPLACE_ADDRESS).
+    override = os.getenv(f"KAGAZ_{role.upper()}_ADDRESS")
+    if override:
+        return override
     return Identity.from_seed(seed_for(role), 0).address
+
+
+# Expert marketplace
+PLATFORM_FEE_PERCENT = float(os.getenv("KAGAZ_PLATFORM_FEE_PERCENT", "20"))
+# Comma-separated agent addresses whose credentials the Kagaz team has checked.
+VERIFIED_EXPERTS = {a.strip() for a in os.getenv("KAGAZ_VERIFIED_EXPERTS", "").split(",") if a.strip()}
+# Demo only: approve any expert whose credential number is well-formed.
+AUTO_APPROVE_EXPERTS = os.getenv("KAGAZ_AUTO_APPROVE_EXPERTS", "false").lower() == "true"

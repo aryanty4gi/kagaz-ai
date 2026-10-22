@@ -5,6 +5,9 @@
 Scenario A (scam):    fake e-challan SMS -> scam card -> report pack -> "check officially"
 Scenario B (genuine): electricity notice -> review card -> proceed -> remind
                       -> expert offer -> pay -> paid expert review arrives
+                      (a verified human CA agent registers with the marketplace,
+                       gets the paid job, and answers it over chat)
+Scenario D (reuse):   an outside "SMS Shield" agent calls the Verify agent directly
 Scenario C (image):   screenshot of a "digital arrest" SMS -> OCR -> scam card
 The simulated user clicks card buttons by replying with each CTA's selection
 JSON, exactly as ASI:One does for a direct @mention.
@@ -13,6 +16,7 @@ JSON, exactly as ASI:One does for a direct @mention.
 import asyncio
 import json
 import os
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,6 +24,9 @@ from uuid import uuid4
 
 os.environ.setdefault("KAGAZ_USE_MAILBOX", "false")
 os.environ.setdefault("KAGAZ_ONLINE_CHECKS", "false")
+os.environ.setdefault("KAGAZ_AUTO_APPROVE_EXPERTS", "true")
+for _k in ("STRIPE_SECRET_KEY", "STRIPE_PUBLISHABLE_KEY"):
+    os.environ.pop(_k, None)  # gateway runs in demo mode in tests
 
 from uagents import Agent, Bureau, Context  # noqa: E402
 from uagents_core.contrib.protocols.chat import (  # noqa: E402
@@ -29,8 +36,21 @@ from uagents_core.contrib.protocols.chat import (  # noqa: E402
 from kagaz import config  # noqa: E402
 from kagaz.cards import text_message  # noqa: E402
 from run_local import build_all  # noqa: E402
-from agents import coordinator_agent  # noqa: E402
+from agents import coordinator_agent, expert_agent  # noqa: E402
 from tests.test_core import DIGITAL_ARREST, render_png  # noqa: E402
+
+# E2E_FAKE_STRIPE=1 runs the payment step through the gateway code path with a
+# fake Stripe that reports the checkout as paid.
+FAKE_STRIPE = os.getenv("E2E_FAKE_STRIPE") == "1"
+if FAKE_STRIPE:
+    from kagaz import payments as _gw
+
+    _gw.enabled = lambda: True
+    _gw.create_checkout = lambda case_id, user, rupees, desc: {
+        "stripe": {"ui_mode": "embedded", "client_secret": "cs_secret_x",
+                   "checkout_session_id": "cs_test_e2e", "publishable_key": "pk_test"},
+        "session_ids": ["cs_test_e2e"], "hosted_url": "https://checkout.stripe.com/c/pay/cs_test_e2e"}
+    _gw.paid_session = lambda ids: ("cs_test_e2e", "pi_e2e")
 
 # Stand-in for Agentverse storage: the "uploaded" screenshot.
 SCREENSHOT = render_png(DIGITAL_ARREST, dark=True)
@@ -41,6 +61,50 @@ SAMPLES = {p.name: p.read_text() for p in (ROOT / "samples").glob("*.txt")}
 COORD = config.address_for("coordinator")
 
 log: list[dict] = []
+
+# Scenario D: a third-party agent that only knows Verify's public message models.
+from uagents import Model  # noqa: E402
+
+
+class VerifyRequest(Model):
+    notice_text: str
+    fields_json: str = "{}"
+
+
+class VerifyResult(Model):
+    ok: bool
+    report_json: str
+    error: str = ""
+
+
+shield = Agent(name="sms_shield_demo", seed="kagaz-e2e-sms-shield", port=8197,
+               endpoint=["http://127.0.0.1:8197/submit"])
+shield_result: dict = {}
+shield_asked: list = []
+
+
+@shield.on_interval(period=3.0)
+async def shield_asks(ctx: Context):
+    if shield_result or shield_asked:
+        return
+    shield_asked.append(True)
+    await ctx.send(config.address_for("verify"), VerifyRequest(
+        notice_text="Congratulations! You won KBC lottery of 25 lakh. Pay Rs 15,000 "
+                    "processing fee to claim. WhatsApp 9123456789"))
+
+
+@shield.on_message(VerifyResult)
+async def shield_got(ctx: Context, sender: str, msg: VerifyResult):
+    shield_result.update(json.loads(msg.report_json))
+    print(f"\nSMS SHIELD << Kagaz Verify says {shield_result.get('verdict')} "
+          f"(risk {shield_result.get('score')})")
+
+# A human CA running their own Expert agent (see docs/EXPERTS.md).
+human_ca = expert_agent.build(False, profile={
+    "mode": "human", "name": "Test CA", "profession": "CA", "credential_id": "123456",
+    "specialties": ["electricity_disconnection"], "fee": "0.4", "languages": ["en"],
+    "ai_assisted": False, "pin": "4321", "seed": "kagaz-e2e-test-human-ca",
+})
 
 user = Agent(name="test_user", seed="kagaz-e2e-test-user", port=8199,
              endpoint=["http://127.0.0.1:8199/submit"])
@@ -56,8 +120,11 @@ script = [
     ("expect_card", "detail", {"action": "remind"}),
     ("expect_text", "Done. I'll message you", {"action": "expert"}),
     ("expect_card", "review", {"action": "pay_expert"}),
-    ("expect_text", "Sent to the Expert Desk", None),
-    ("expect_text", "Expert review", None),
+    *([("expect_card", "review", {"action": "check_payment"}),
+       ("expect_text", "Payment of Rs 99 received", None)] if FAKE_STRIPE else
+      [("expect_text", "Payment of Rs 99 recorded", None)]),
+    ("expect_text", "expert marketplace", None),
+    ("expect_text", "Expert review** from Test CA, CA (verified", None),
     ("send_image", "screenshot.png"),
     ("expect_text", "I read this from your image", None),
     ("expect_card", "custom", None),
@@ -86,6 +153,7 @@ async def advance(ctx: Context):
 @user.on_event("startup")
 async def start(ctx: Context):
     await asyncio.sleep(2)
+    await ctx.send(human_ca.address, text_message("login 4321"))
     await advance(ctx)
 
 
@@ -97,6 +165,17 @@ async def on_ack(ctx: Context, sender: str, msg: ChatAcknowledgement):
 @user.on_message(ChatMessage)
 async def on_reply(ctx: Context, sender: str, msg: ChatMessage):
     text = " ".join(c.text for c in msg.content if isinstance(c, TextContent))
+    if sender == human_ca.address:
+        # The test user is also the CA, reading jobs on chat and answering them.
+        print("\n" + "-" * 70 + f"\nCA's AGENT << {text[:300]}")
+        m = re.search(r"case `([0-9a-f]+)`", text)
+        if "New paid review" in text and m:
+            await ctx.send(human_ca.address, text_message(
+                f"review {m.group(1)}: Ready to send. Attach the last two paid bills and "
+                "ask for a meter test in writing."))
+        return
+    if not text and not msg.content:
+        return
     card = next((c.metadata for c in msg.content if isinstance(c, MetadataContent)), None)
     kind = card["card_kind"] if card else None
     log.append({"text": text, "card_kind": kind,
@@ -122,13 +201,17 @@ async def on_reply(ctx: Context, sender: str, msg: ChatMessage):
 
 
 async def main():
-    agents = build_all() + [user]
+    agents = build_all() + [human_ca, shield, user]
     bureau = Bureau(agents=agents, port=8198)
     task = asyncio.create_task(bureau.run_async())
     try:
         await asyncio.wait_for(done.wait(), timeout=float(os.getenv("E2E_TIMEOUT", "180")))
-        print(f"\n✅ E2E PASSED: all {len(script)} steps completed")
-        code = 0
+        if shield_result.get("verdict") != "SCAM":
+            print(f"\n❌ E2E FAILED: outside agent got {shield_result or 'no reply'} from Verify")
+            code = 1
+        else:
+            print(f"\n✅ E2E PASSED: all {len(script)} steps completed, plus Verify reuse")
+            code = 0
     except asyncio.TimeoutError:
         print(f"\n❌ E2E FAILED at step {step['i']}: {script[step['i']][:2]}")
         code = 1

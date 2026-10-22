@@ -180,3 +180,127 @@ def test_report_button_is_parsed():
 
     assert parse_selection('{"action": "report_scam"}')["action"] == "report_scam"
     assert parse_selection("Report this scam + warn my family")["action"] == "report_scam"
+
+
+# ------------------------------------------------------------- new notice types
+
+def test_new_notice_types():
+    expected = {
+        "06_gst_asmt10.txt": ("gst_notice", "₹48,600"),
+        "07_court_summons.txt": ("court_summons", "₹240,000"),
+        "08_school_fee.txt": ("school_fee", "₹18,500"),
+    }
+    for name, (ntype, amount) in expected.items():
+        fields, report = check(name)
+        assert fields.notice_type == ntype, name
+        assert fields.amount == amount, name
+        assert fields.deadline, name
+        assert report.verdict == "NO_RED_FLAGS", name
+        plan = action.build_plan(fields, rules.explain(fields))
+        assert plan["draft"] and plan["steps"], name
+    court, _ = check("07_court_summons.txt")
+    assert rules.explain(court)["escalate"] is True
+    assert knowledge.classify("You won a lottery, pay processing fee") == "unknown"
+
+
+# ------------------------------------------------------------- marketplace + gateway
+
+def _reg(**kw):
+    from kagaz.messages import RegisterExpert
+
+    base = dict(name="A. Gupta", profession="CA", credential_id="123456",
+                specialties=["gst_notice"], fee="0.4")
+    base.update(kw)
+    return RegisterExpert(**base)
+
+
+def test_expert_credentials_are_checked(monkeypatch):
+    from agents import marketplace_agent as m
+    from kagaz import config
+
+    monkeypatch.setattr(config, "AUTO_APPROVE_EXPERTS", False)
+    monkeypatch.setattr(config, "VERIFIED_EXPERTS", {"agent1qverified"})
+    assert m.validate(_reg(), "agent1qnew")[0] == "pending"
+    assert m.validate(_reg(), "agent1qverified")[0] == "approved"
+    assert m.validate(_reg(credential_id="12AB"), "agent1qnew")[0] == "rejected"
+    assert m.validate(_reg(profession="Lawyer", credential_id="D/1234/2015"),
+                      "agent1qverified")[0] == "approved"
+    assert m.validate(_reg(profession="Astrologer"), "agent1qverified")[0] == "rejected"
+    # Nobody can pretend to be the built-in AI desk.
+    assert m.validate(_reg(ai_assisted=True), "agent1qnew")[0] == "rejected"
+    assert m.validate(_reg(ai_assisted=True), config.address_for("expert"))[0] == "approved"
+
+
+def test_marketplace_picks_matching_expert_within_budget():
+    from agents import marketplace_agent as m
+    from kagaz import config
+
+    experts = {
+        "a1": {"status": "approved", "ai_assisted": False, "fee": "0.4",
+               "specialties": ["gst_notice"], "active": 1, "done": 9},
+        "a2": {"status": "approved", "ai_assisted": False, "fee": "0.3",
+               "specialties": ["all"], "active": 0, "done": 2},
+        "a3": {"status": "pending", "ai_assisted": False, "fee": "0.1",
+               "specialties": ["all"], "active": 0, "done": 0},
+        "a4": {"status": "approved", "ai_assisted": False, "fee": "0.9",
+               "specialties": ["gst_notice"], "active": 0, "done": 50},
+    }
+    assert m.pick_expert(experts, "gst_notice", 0.5) == "a2"          # least busy
+    assert m.pick_expert(experts, "gst_notice", 0.5, {"a2"}) == "a1"
+    assert m.pick_expert(experts, "gst_notice", 0.5, {"a1", "a2"}) == config.address_for("expert")
+    label = m.reviewer_label({"name": "A. Gupta", "profession": "CA", "credential_id": "123456"})
+    assert "verified" in label and "123456" not in label
+
+
+def test_gateway_demo_mode_and_amounts(monkeypatch):
+    from kagaz import payments
+
+    monkeypatch.setattr(payments, "STRIPE_SECRET_KEY", "")
+    assert payments.enabled() is False
+    assert payments.amount_minor("99") == 9900
+    assert payments.demo_transaction_id().startswith("demo-")
+    assert payments.refund("") is False
+
+
+def test_new_agents_get_private_derived_seeds(monkeypatch):
+    from kagaz import config
+
+    monkeypatch.setenv("KAGAZ_COORDINATOR_SEED", "secret-coordinator-seed")
+    monkeypatch.delenv("KAGAZ_MARKETPLACE_SEED", raising=False)
+    seed = config.seed_for("marketplace")
+    assert seed != "kagaz-ai-marketplace-dev-seed-change-me" and "secret" not in seed
+    monkeypatch.setenv("KAGAZ_MARKETPLACE_ADDRESS", "agent1qoverride")
+    assert config.address_for("marketplace") == "agent1qoverride"
+
+
+def test_stripe_checkout_payload_never_leaks_secret(monkeypatch):
+    import types
+
+    from kagaz import payments
+
+    created = []
+
+    class Session:
+        @staticmethod
+        def create(**kw):
+            created.append(kw)
+            n = len(created)
+            return types.SimpleNamespace(id=f"cs_test_{n}", client_secret=f"cs_secret_{n}",
+                                         url=f"https://checkout.stripe.com/c/pay/cs_test_{n}")
+
+        @staticmethod
+        def retrieve(sid):
+            return types.SimpleNamespace(payment_status="paid" if sid == "cs_test_2" else "unpaid",
+                                         payment_intent="pi_123")
+
+    fake = types.SimpleNamespace(checkout=types.SimpleNamespace(Session=Session), api_key="")
+    monkeypatch.setattr(payments, "_stripe", lambda: fake)
+    monkeypatch.setattr(payments, "STRIPE_SECRET_KEY", "sk_test_SECRET")
+    monkeypatch.setattr(payments, "STRIPE_PUBLISHABLE_KEY", "pk_test_x")
+    out = payments.create_checkout("case1", "agent1quser", "99", "Expert review")
+    assert created[0]["ui_mode"] == "embedded"
+    assert created[0]["line_items"][0]["price_data"]["unit_amount"] == 9900
+    assert out["stripe"]["client_secret"] == "cs_secret_1"
+    assert out["hosted_url"].startswith("https://checkout.stripe.com")
+    assert "sk_test_SECRET" not in str(out)
+    assert payments.paid_session(out["session_ids"]) == ("cs_test_2", "pi_123")

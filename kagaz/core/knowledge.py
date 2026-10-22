@@ -173,6 +173,95 @@ NOTICE_TYPES: dict[str, dict] = {
         "escalate_when": "Always. Property is at risk.",
         "official_domains": [],
     },
+    "gst_notice": {
+        "title": "GST notice",
+        "issuer": "GST department (Central or State tax officer)",
+        "law": "CGST Act, 2017 (scrutiny u/s 61, demand u/s 73/74)",
+        "keywords": ["gst", "gstin", "asmt", "drc-01", "drc 01", "cgst", "sgst",
+                     "input tax credit", "show cause", "gstr", "tax period"],
+        "what_it_means": (
+            "The GST officer found a mismatch or a short payment in your returns and is "
+            "asking you to explain it, or proposing tax, interest and penalty."
+        ),
+        "deadline_rule": (
+            "The notice states the reply period, usually 30 days. Scrutiny notices "
+            "(ASMT-10) are answered in ASMT-11; show cause notices (DRC-01) in DRC-06. "
+            "No reply can lead to an order against you."
+        ),
+        "official_portals": ["https://www.gst.gov.in", "https://www.cbic.gov.in"],
+        "steps": [
+            "Log in at gst.gov.in yourself: Services > User Services > View Notices and Orders.",
+            "If it is a central tax letter, verify its DIN on cbic.gov.in.",
+            "Match the figures with your GSTR-1, GSTR-3B and GSTR-2B for that period.",
+            "Reply on the portal in the form named in the notice, with documents, before the date.",
+            "If you agree, pay through the portal (DRC-03) and mention it in the reply.",
+        ],
+        "rights": [
+            "Right to a personal hearing before an adverse order.",
+            "Right to appeal an order within the time allowed (section 107).",
+        ],
+        "escalate_when": "A demand with penalty, or you cannot explain the mismatch.",
+        "official_domains": ["gst.gov.in", "cbic.gov.in"],
+    },
+    "court_summons": {
+        "title": "Court summons",
+        "issuer": "Court (civil or criminal)",
+        "law": "Code of Civil Procedure, 1908 (Order V) / Bharatiya Nagarik Suraksha Sanhita, 2023",
+        "keywords": ["summons", "court", "magistrate", "cnr", "case no", "plaintiff",
+                     "defendant", "hearing", "appear", "advocate", "judge", "complainant"],
+        "what_it_means": (
+            "A court is asking you to appear (or answer) in a case on a fixed date. "
+            "It does not mean you are guilty or must pay anything."
+        ),
+        "deadline_rule": (
+            "Appear in person or through a lawyer on the date written on the summons. "
+            "Ignoring a civil summons can lead to a decision without you; ignoring a "
+            "criminal summons can lead to a warrant."
+        ),
+        "official_portals": ["https://ecourts.gov.in", "https://services.ecourts.gov.in"],
+        "steps": [
+            "Check the case on services.ecourts.gov.in with the CNR or case number.",
+            "Note the court, the case number and the hearing date.",
+            "Talk to a lawyer before the date; free legal aid is available through "
+            "your District Legal Services Authority (nalsa.gov.in).",
+            "Appear on the date, in person or through your lawyer.",
+            "Never pay anyone who offers to 'cancel' or 'settle' a summons by phone.",
+        ],
+        "rights": [
+            "Right to be represented by a lawyer, and to free legal aid if eligible.",
+            "Right to see the complaint or plaint filed against you.",
+        ],
+        "escalate_when": "Always. Talk to a lawyer before the hearing date.",
+        "official_domains": ["ecourts.gov.in", "nalsa.gov.in"],
+    },
+    "school_fee": {
+        "title": "School fee notice",
+        "issuer": "School",
+        "law": "State school fee regulation rules (vary by state); RTE Act, 2009",
+        "keywords": ["school", "tuition", "fee", "student", "admission", "term",
+                     "late fee", "parent", "academic year", "class"],
+        "what_it_means": (
+            "Your child's school says a fee is due, often with a late fee if paid after a date."
+        ),
+        "deadline_rule": (
+            "Pay by the date on the notice to avoid a late fee. If you dispute the amount, "
+            "raise it in writing with the school before the date."
+        ),
+        "official_portals": ["Your school's official fee portal or office"],
+        "steps": [
+            "Confirm the amount with the school office or its official fee portal.",
+            "Ask for the approved fee structure and an itemised bill if the amount looks high.",
+            "Pay only to the school's own portal or bank account, and keep the receipt.",
+            "If the hike looks above the allowed limit, complain to your state's fee "
+            "regulatory committee or the district education office.",
+        ],
+        "rights": [
+            "Right to an itemised fee structure and a receipt for every payment.",
+            "EWS/DG seats under section 12 of the RTE Act are free.",
+        ],
+        "escalate_when": "A large, unexplained fee hike or threats to stop the child's studies.",
+        "official_domains": [],
+    },
 }
 
 GENERIC = {
@@ -196,6 +285,8 @@ OFFICIAL_SUFFIXES = (".gov.in", ".nic.in", ".bank.in")
 OFFICIAL_EXACT = {
     "incometax.gov.in", "echallan.parivahan.gov.in", "parivahan.gov.in",
     "vcourts.gov.in", "cybercrime.gov.in", "sbi.co.in", "onlinesbi.sbi",
+    "gst.gov.in", "services.gst.gov.in", "cbic.gov.in", "ecourts.gov.in",
+    "services.ecourts.gov.in",
 }
 
 CYBER_HELP = (
@@ -211,6 +302,9 @@ _SECTION_PATTERNS = {
     "it_139_9": r"139\s*\(\s*9\s*\)",
     "it_148": r"(?:section|sec\.?|u/s|under)\s*148a?\b|\b148a\b",
     "sarfaesi_13_2": r"13\s*\(\s*2\s*\)|sarfaesi",
+    "gst_notice": r"\bgstin\b|asmt-?\s?1[01]\b|drc-?\s?0?[16]\b|cgst act",
+    "court_summons": r"\bsummons\b|\bcnr\b",
+    "school_fee": r"school fees?|tuition fees?|fee (?:due|reminder)",
 }
 
 

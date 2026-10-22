@@ -17,13 +17,14 @@ DEFAULT_AVATAR_URL = (
 )
 
 
-def make_agent(role: str, description: str, mailbox: bool | None = None) -> Agent:
+def make_agent(role: str, description: str, mailbox: bool | None = None,
+               name: str | None = None, seed: str | None = None) -> Agent:
     spec = config.AGENTS[role]
     use_mailbox = config.USE_MAILBOX if mailbox is None else mailbox
     readme = README_DIR / f"{role}.md"
     kwargs = dict(
-        name=spec["name"],
-        seed=config.seed_for(role),
+        name=name or spec["name"],
+        seed=seed or config.seed_for(role),
         port=spec["port"],
         description=description,
         readme_path=str(readme) if readme.exists() else None,

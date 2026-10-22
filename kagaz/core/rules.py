@@ -10,7 +10,7 @@ from kagaz import llm
 from kagaz.core import knowledge
 from kagaz.core.reader import NoticeFields, days_left
 
-ALWAYS_ESCALATE = {"it_148", "sarfaesi_13_2"}
+ALWAYS_ESCALATE = {"it_148", "sarfaesi_13_2", "court_summons"}
 LARGE_AMOUNT = 50000
 
 

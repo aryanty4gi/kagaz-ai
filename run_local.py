@@ -1,4 +1,4 @@
-"""Run all six Kagaz agents in one process.
+"""Run all seven Kagaz agents in one process.
 
     python run_local.py
 
@@ -11,7 +11,10 @@ import os
 
 from uagents import Bureau
 
-from agents import action_agent, coordinator_agent, expert_agent, reader_agent, rules_agent, verify_agent
+from agents import (
+    action_agent, coordinator_agent, expert_agent, marketplace_agent, reader_agent, rules_agent,
+    verify_agent,
+)
 from kagaz import config
 
 
@@ -24,6 +27,7 @@ def build_all():
         rules_agent.build(False),
         action_agent.build(False),
         expert_agent.build(False),
+        marketplace_agent.build(False),
     ]
 
 
