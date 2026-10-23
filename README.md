@@ -1,7 +1,27 @@
-# Kagaz AI: any official notice, turned into action
+<p align="center">
+  <img src="assets/readme/banner.png" alt="Kagaz AI: Notice mila? Kagaz ko de do." width="100%">
+</p>
 
 ![tag:innovationlab](https://img.shields.io/badge/innovationlab-3D8BD3)
 ![tag:hackathon](https://img.shields.io/badge/hackathon-5F43F1)
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Fetch--A--Thon-3.0-6D3CF5" alt="Fetch-A-Thon 3.0">
+  <img src="https://img.shields.io/badge/agents-7%20uAgents-110E24" alt="7 uAgents">
+  <img src="https://img.shields.io/badge/live%20on-Agentverse-22A06B" alt="Live on Agentverse">
+  <img src="https://img.shields.io/badge/chat-ASI%3AOne-6D3CF5" alt="Chat on ASI:One">
+  <img src="https://img.shields.io/badge/language-English%20%7C%20%E0%A4%B9%E0%A4%BF%E0%A4%82%E0%A4%A6%E0%A5%80-8B66F8" alt="English and Hindi">
+  <img src="https://img.shields.io/badge/license-MIT-DDD3FD" alt="MIT license">
+</p>
+
+<p align="center">
+  <a href="https://asi1.ai"><b>Try it on ASI:One</b></a> ·
+  <a href="https://agentverse.ai/agents/details/agent1qwvc8wrwftwgzlanhhc6k5pq55ukqet5yw7jsej6aqyrlt3ull46u4zrqya/profile"><b>Agentverse profile</b></a> ·
+  <a href="#agent-architecture"><b>How it works</b></a> ·
+  <a href="#run-it"><b>Run it</b></a>
+</p>
+
+# Kagaz AI: any official notice, turned into action
 
 **"Notice mila? Kagaz ko de do."** Paste any official notice or SMS into ASI:One,
 or upload a **screenshot or photo** of it:
@@ -16,6 +36,8 @@ a bank letter, a GST notice, a court summons, a school fee notice. A team of sev
    Payment Protocol) and the expert's own agent is paid per job, agent-to-agent
 6. **Fights back against scams**: a ready-to-file cybercrime.gov.in complaint and a
    WhatsApp warning for your family, in English and Hindi
+
+<p align="center"><img src="assets/readme/flow.png" alt="How it works: paste or upload, verify, explain, act" width="100%"></p>
 
 ## Try it live (no install)
 
@@ -41,7 +63,21 @@ the Agent Chat Protocol, ASI:One Interactive Cards and the Agent Payment Protoco
   scam-link checkers. Nobody verifies, explains, acts and escalates in one flow,
   for every kind of notice, for ordinary citizens.
 
+## What's inside
+
+<p align="center"><img src="assets/readme/features.png" alt="Features: scam detection, 9 notice types, Hindi mode, screenshot OCR, scam report pack, reminders, Rs 99 expert review, Verify as a service" width="100%"></p>
+
+### A scam, caught
+
+The fake e-challan SMS from [`samples/01_fake_echallan_sms.txt`](samples/01_fake_echallan_sms.txt), and the verdict the Verify agent gives for it:
+
+<p align="center"><img src="assets/readme/example.png" alt="Fake e-challan SMS flagged as SCAM with risk 100/100 and five reasons" width="100%"></p>
+
 ## Agent architecture
+
+<p align="center"><img src="assets/readme/agents.png" alt="Agent map: the Coordinator in the middle, with Reader, Verify, Rules, Action, Marketplace and Expert desk around it" width="100%"></p>
+
+The full message flow:
 
 ```mermaid
 flowchart LR
@@ -225,3 +261,11 @@ Each address is fixed by its private seed.
   fallback. PDFs need a screenshot or pasted text for now.
 
 *Kagaz gives general information, not legal advice.*
+
+## Team
+
+Built by **Aryan Tyagi** ([@aryanty4gi](https://github.com/aryanty4gi)), Team Macieguy, for Fetch-A-Thon 3.0.
+
+## License
+
+[MIT](LICENSE)
