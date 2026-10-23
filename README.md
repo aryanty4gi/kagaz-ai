@@ -11,6 +11,7 @@
   <img src="https://img.shields.io/badge/live%20on-Agentverse-22A06B" alt="Live on Agentverse">
   <img src="https://img.shields.io/badge/chat-ASI%3AOne-6D3CF5" alt="Chat on ASI:One">
   <img src="https://img.shields.io/badge/language-English%20%7C%20%E0%A4%B9%E0%A4%BF%E0%A4%82%E0%A4%A6%E0%A5%80-8B66F8" alt="English and Hindi">
+  <a href="https://github.com/aryanty4gi/kagaz-ai/actions/workflows/tests.yml"><img src="https://github.com/aryanty4gi/kagaz-ai/actions/workflows/tests.yml/badge.svg" alt="Tests"></a>
   <img src="https://img.shields.io/badge/license-MIT-DDD3FD" alt="MIT license">
 </p>
 
