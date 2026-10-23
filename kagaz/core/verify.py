@@ -54,6 +54,10 @@ ACCOUNT_THREAT = re.compile(
     r"(?:connection|account|sim)\W.{0,40}(?:kaat|kat|band|block) (?:diya|kar|ho)|"
     r"(?:कनेक्शन|खाता|अकाउंट|सिम|कार्ड).{0,40}(?:काट|बंद|ब्लॉक)",
     re.IGNORECASE)
+KYC_LINK = re.compile(
+    r"\b(?:kyc|pan|aadhaa?r)\b.{0,40}\b(?:expire\w*|update\w*|verif\w*|pending|complete|link\w*)|"
+    r"(?:केवाईसी|पैन|आधार).{0,40}(?:अपडेट|समाप्त|लिंक)",
+    re.IGNORECASE)
 HINGLISH_URGENCY = re.compile(
     r"turant|aaj raat|aaj hi|kaat diya jayega|band ho jayega|block ho jayega|"
     r"jaldi (?:karein|kare)|warna|तुरंत|आज रात|आज ही|काट दिया जाएगा|बंद कर दिया जाएगा|वरना",
@@ -185,6 +189,9 @@ def _rule_signals(fields: NoticeFields, text: str) -> tuple[list[Signal], list[d
     if PRIZE_FEE.search(text):
         signals.append(Signal("Prize that needs a fee first", 50,
                               "Real prizes never ask you to pay to claim them"))
+    if KYC_LINK.search(text) and fields.urls:
+        signals.append(Signal("KYC/PAN update link", 40,
+                              "Banks never send KYC or PAN update links by SMS or WhatsApp"))
     if ACCOUNT_THREAT.search(text):
         signals.append(Signal("Threat to block your account or service", 20,
                               ACCOUNT_THREAT.search(text).group(0)))

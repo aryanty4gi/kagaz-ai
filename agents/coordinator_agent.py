@@ -118,6 +118,24 @@ def parse_selection(text: str) -> dict:
     return selection
 
 
+# Short texts that still look like a notice or scam (a link, a phone number,
+# money, or a typical scam word) are checked too, not only long ones.
+NOTICE_HINTS = re.compile(
+    r"https?://|www\.|bit\.ly|\b\d{10}\b|₹|\brs\.?\s?\d|\binr\s?\d|"
+    r"\b(otp|kyc|upi|apk|challan|e-?challan|refund|lottery|prize|jackpot|arrest|"
+    r"penalty|disconnect\w*|electricity|bijli|summons|blocked|suspend\w*|"
+    r"won|winner|reward|cashback|parcel|customs)\b",
+    re.IGNORECASE)
+
+
+def looks_like_notice(text: str) -> bool:
+    if len(text) >= 40:
+        return True
+    if re.search(r"[ऀ-ॿ]", text):
+        return len(text) >= 25
+    return len(text) >= 12 and bool(NOTICE_HINTS.search(text))
+
+
 def detect_language(text: str, current: str = "en") -> str:
     if re.search(r"[ऀ-ॿ]", text) or re.search(r"\bhindi\b", text, re.IGNORECASE):
         return "hi"
@@ -531,7 +549,7 @@ def build(mailbox: bool | None = None):
                 save(ctx, sender, {"language": state.get("language", "en")})
                 await ctx.send(sender, cards.text_message(
                     "All set. Send me another notice anytime. 🙏", end_session=True))
-            elif len(text) >= 40:
+            elif looks_like_notice(text):
                 await analyse_notice(ctx, sender, text, state)
             elif state.get("plan") and state["language"] != "en" and re.search(r"hindi", text, re.I):
                 await explain_and_act(ctx, sender, state)

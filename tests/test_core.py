@@ -347,3 +347,25 @@ def test_hindi_explanation_translates_steps(monkeypatch):
     # A broken translation falls back to the English steps.
     monkeypatch.setattr(llm, "complete", lambda *a, **k: "oops")
     assert rules.translate_lines(["Pay on incometax.gov.in"]) == ["Pay on incometax.gov.in"]
+
+
+def test_short_scam_texts_are_checked_but_chit_chat_is_not():
+    from agents.coordinator_agent import looks_like_notice
+    for text in ["Your KYC expired, update: bit.ly/kyc9",
+                 "Share OTP to get Rs 5000 cashback",
+                 "You won lottery! Pay fee now",
+                 "Pending e-challan, pay today",
+                 "आपका बिजली कनेक्शन आज रात काटा जाएगा"]:
+        assert looks_like_notice(text), text
+    for text in ["hi", "hello kagaz", "what can you do?", "explain in hindi",
+                 "हिंदी में समझाओ", "thanks a lot!"]:
+        assert not looks_like_notice(text), text
+
+
+def test_kyc_update_link_is_a_scam_but_plain_kyc_reminder_is_not():
+    from kagaz.core import reader, verify
+    scam = verify.verify(reader.extract_rule_based("Your KYC expired, update: bit.ly/kyc9"), use_llm=False)
+    assert scam.verdict == "SCAM", scam
+    plain = verify.verify(reader.extract_rule_based(
+        "Dear customer, please complete your KYC at your nearest branch."), use_llm=False)
+    assert plain.verdict != "SCAM"
