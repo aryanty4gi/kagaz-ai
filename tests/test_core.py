@@ -482,6 +482,7 @@ def test_casual_chat_greets_and_answers_questions(monkeypatch):
     # Pasted SMS and notices are never treated as a casual question.
     assert not talk.is_question("Your KYC expired, update: bit.ly/kyc9")
     assert not talk.is_question("Did you win? Claim your prize of Rs 25000 now")
+    assert not talk.is_question("Why is your Aadhaar suspended? Verify now at uidai-verify.top")
     monkeypatch.setattr(llm, "complete", lambda system, user, max_tokens=0: "Short answer.")
     assert talk.answer("Can my landlord cut my electricity?", "expert") == "Short answer."
     monkeypatch.setattr(llm, "complete", lambda system, user, max_tokens=0: None)

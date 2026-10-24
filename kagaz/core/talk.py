@@ -11,6 +11,7 @@ from kagaz import llm
 GREETING = re.compile(
     r"^\s*(hi+|hello+|hey+|hii+|namaste|namaskar|good (?:morning|afternoon|evening)|"
     r"thanks?|thank you|kaise ho|kya haal|who are you|what can you do|help)"
+    r"(?:\s+(?:there|bro|kagaz|@kagaz|everyone|ji|sir))?"
     r"\b[\s!.?🙏👋]*$", re.IGNORECASE)
 QUESTION_START = re.compile(
     r"^\s*(what|how|why|when|where|which|who|can|could|should|is|are|do|does|will|"
@@ -36,7 +37,11 @@ def is_question(text: str) -> bool:
     """A general question in the user's own words (not a pasted notice)."""
     text = (text or "").strip()
     if not 6 <= len(text) <= 300 or re.search(
-            r"https?://|www\.|bit\.ly|\b\d{10}\b|₹|\brs\.?\s?\d|\binr\s?\d", text, re.IGNORECASE):
+            r"https?://|www\.|bit\.ly|\b\d{10}\b|₹|\brs\.?\s?\d|\binr\s?\d|"
+            # a website name, or the pushy words scam SMS use
+            r"\b[\w-]+\.(?:com|in|top|xyz|net|org|info|co|io|site|online|link|ly|me|cc|gov)\b|"
+            r"\b(?:click|verify now|update now|pay now|call now|immediately|urgent\w*|"
+            r"last chance|act now|within \d+ hours?)\b", text, re.IGNORECASE):
         return False
     return text.endswith("?") or bool(QUESTION_START.match(text))
 
