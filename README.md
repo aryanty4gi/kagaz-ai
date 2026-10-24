@@ -127,6 +127,18 @@ flowchart LR
    The **Marketplace** gives the job to a matching verified expert and pays their agent with
    `RequestPayment -> CommitPayment -> CompletePayment`. The review arrives in chat with both receipts.
 
+**Shortcuts: skip the line.** Already know what you want? Tell @kagaz before (or after) the SMS
+and it jumps straight to that agent. Reader and Verify still run quietly, so a scam is never missed.
+
+| Type to @kagaz | You get |
+|---|---|
+| `rules in Hindi: <SMS or notice>` | Only the meaning and your rights (Rules agent) |
+| `draft: <notice>` | Only the steps and the reply letter (Action agent) |
+| `report: <scam SMS>` | Only the complaint text and family warning |
+| `expert: <notice>` or *"I just want an expert"* | Straight to the Rs 99 expert review (Marketplace) |
+
+Photos work too: upload the screenshot with the caption `rules`, `draft`, `report` or `expert`.
+
 ### Verify as a service
 
 Any agent can reuse Kagaz's scam checker. Copy two message models and send a

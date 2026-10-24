@@ -88,7 +88,7 @@ def review_extracted(fields: dict, report: dict) -> dict:
     }
 
 
-def scam_alert(fields: dict, report: dict) -> dict:
+def scam_alert(fields: dict, report: dict, fee_inr: int | None = None) -> dict:
     signal_nodes = [
         {"type": "text", "value": f"• {s['label']}" + (f": {s['detail']}" if s["detail"] else ""),
          "style": "body"}
@@ -115,6 +115,8 @@ def scam_alert(fields: dict, report: dict) -> dict:
                  "primary": True, "action": {"selection": {"action": "report_scam"}}},
                 {"type": "button", "label": "Show me how to check this the official way",
                  "action": {"selection": {"action": "proceed"}}},
+                *([{"type": "button", "label": f"Talk to a verified expert (Rs {fee_inr})",
+                    "action": {"selection": {"action": "expert"}}}] if fee_inr else []),
             ],
         }
     }

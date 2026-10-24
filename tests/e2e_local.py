@@ -222,6 +222,10 @@ SOLO_CHECKS = [
     ("expert", ELEC, ["Expert review", "Draft reply I prepared", "Review"]),
     ("marketplace", "hi", ["Kagaz Expert Marketplace", "Approved experts", "EXPERTS.md"]),
     ("marketplace", ELEC, ["Best expert for this Electricity disconnection notice", "Test CA"]),
+    # Shortcuts through @kagaz: skip the cards and get one agent's answer.
+    ("coordinator", "I know it's a scam, just tell me the rules in Hindi: "
+     + SAMPLES["01_fake_echallan_sms.txt"], ["Quick check", "scam", "आपके अधिकार"]),
+    ("coordinator", "draft in English: " + ELEC, ["Quick check", "What to do", "Your draft reply"]),
 ]
 solo_user = Agent(name="solo_user", seed="kagaz-e2e-solo-user", port=8196,
                   endpoint=["http://127.0.0.1:8196/submit"])

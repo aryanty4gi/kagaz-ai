@@ -136,6 +136,79 @@ def looks_like_notice(text: str) -> bool:
     return len(text) >= 12 and bool(NOTICE_HINTS.search(text))
 
 
+# "I know it's a scam, connect me to an expert: <SMS>" skips the step-by-step
+# cards and goes straight to the paid expert review.
+DIRECT_EXPERT = re.compile(
+    r"@?kagaz ?(?:expert|marketplace)\b|\bexperts?\b|\bmarketplace agent\b|"
+    r"\b(?:go|take me|send me|straight)\s+to\s+(?:the\s+)?marketplace\b|"
+    r"\b(?:talk|speak|connect|send)\w*\s+(?:me\s+)?(?:to|with)\s+(?:an?\s+)?"
+    r"(?:ca|lawyer|vakeel|vakil|professional)\b|"
+    r"\b(?:want|need|chahiye)\w*\s+(?:an?\s+)?(?:ca|lawyer|vakeel|vakil)\b",
+    re.IGNORECASE)
+
+
+def wants_expert(text: str) -> bool:
+    return bool(DIRECT_EXPERT.search(text or ""))
+
+
+# Shortcuts to one agent's answer, e.g. "rules in Hindi: <SMS>" or
+# "draft: <notice>". Only the user's own instruction counts: a short line
+# before ":" or a newline, or the last line, not words inside the notice.
+DIRECT_ROUTES = [
+    ("report", re.compile(r"\breport\b|\bcomplaint\b|\bwarn (?:my )?family\b|"
+                          r"\bshikayat\b|\b1930\b", re.IGNORECASE)),
+    ("action", re.compile(r"@?kagaz ?action\b|\bdraft\b|\breply letter\b|\bsteps\b|"
+                          r"\bwhat (?:should|do) i do\b|\bkya kar\w*\b|\bjawab\b",
+                          re.IGNORECASE)),
+    ("rules", re.compile(r"@?kagaz ?rules\b|\brules?\b|\brights?\b|\blaws?\b|"
+                         r"\bkanoon\w*\b|\bniyam\w*\b|\badhikar\b|\bexplain\b|"
+                         r"\bmeaning\b|\bmatlab\b", re.IGNORECASE)),
+]
+
+
+REQUEST_WORDS = re.compile(
+    r"\b(?:just|only|sirf|bas|want|need|tell me|give me|show me|send me|take me|batao|"
+    r"chahiye|i know|skip|direct\w*|straight|please|pls)\b|@kagaz", re.IGNORECASE)
+
+
+def is_instruction(line: str) -> bool:
+    """A short line the user wrote to ask for something (not a notice's own text)."""
+    line = line.strip()
+    return 0 < len(line) <= 100 and "http" not in line.lower() and (
+        len(line.split()) <= 4 or bool(REQUEST_WORDS.search(line)))
+
+
+def instruction_candidates(text: str) -> list[tuple[str, str]]:
+    """Possible (user's instruction, notice text) pairs: a line before the notice,
+    or a line after it."""
+    text = (text or "").strip()
+    found = []
+    m = re.match(r"(.{1,100}?)(?::\s|\n)(.+)", text, re.DOTALL)
+    if m and is_instruction(m.group(1)) and len(m.group(2).strip()) >= 12:
+        found.append((m.group(1), m.group(2).strip()))
+    m = re.match(r"(.+?)(?:\n|[.!?]\s+)([^\n.!?]{1,100})[.!?]?$", text, re.DOTALL)
+    if m and REQUEST_WORDS.search(m.group(2)) and is_instruction(m.group(2)) \
+            and len(m.group(1).strip()) >= 12:
+        found.append((m.group(2), m.group(1).strip()))
+    return found
+
+
+def direct_route(text: str) -> tuple[str | None, str]:
+    """Which single step the user asked for, and the notice text to use."""
+    m = re.match(r"\s*@?kagaz ?(rules|action|expert|marketplace)\b[\s:,-]*(.+)", text or "",
+                 re.IGNORECASE | re.DOTALL)
+    if m and len(m.group(2).strip()) >= 12:
+        route = m.group(1).lower()
+        return ("expert" if route == "marketplace" else route), m.group(2).strip()
+    for instruction, notice in instruction_candidates(text):
+        if wants_expert(instruction):
+            return "expert", notice
+        for route, pattern in DIRECT_ROUTES:
+            if pattern.search(instruction):
+                return route, notice
+    return None, text
+
+
 def detect_language(text: str, current: str = "en") -> str:
     if re.search(r"[ऀ-ॿ]", text) or re.search(r"\bhindi\b", text, re.IGNORECASE):
         return "hi"
@@ -227,7 +300,8 @@ def build(mailbox: bool | None = None):
 
     # -------------------------------------------------- steps
 
-    async def analyse_notice(ctx: Context, sender: str, text: str, state: dict):
+    async def check_notice(ctx: Context, sender: str, text: str, state: dict) -> dict:
+        """Reader + Verify; saves the case and returns the scam report."""
         text = strip_language_request(text)
         degraded = []
         read, failed = await ask(
@@ -249,12 +323,16 @@ def build(mailbox: bool | None = None):
         state.update(stage="review", fields=fields, report=report,
                      case_id=uuid4().hex[:10], degraded=degraded)
         save(ctx, sender, state)
+        return report
 
+    async def analyse_notice(ctx: Context, sender: str, text: str, state: dict):
+        report = await check_notice(ctx, sender, text, state)
+        fields, degraded = state["fields"], state["degraded"]
         if report["verdict"] == "SCAM":
             await ctx.send(sender, cards.card_message(
                 "🚨 **Stop. This looks like a scam.** Don't click the link, pay, or share "
                 "any OTP." + fallback_note(degraded),
-                "custom", cards.scam_alert(fields, report)))
+                "custom", cards.scam_alert(fields, report, config.EXPERT_FEE_INR)))
         else:
             intro = {
                 "SUSPICIOUS": "⚠️ I found some warning signs, so treat this carefully.",
@@ -265,7 +343,8 @@ def build(mailbox: bool | None = None):
                 + fallback_note(degraded),
                 "review", cards.review_extracted(fields, report)))
 
-    async def explain_and_act(ctx: Context, sender: str, state: dict):
+    async def build_plan(ctx: Context, sender: str, state: dict) -> list[str]:
+        """Rules + Action; saves the explanation and plan, returns degraded agents."""
         fields_json = json.dumps(state["fields"])
         language = state.get("language", "en")
         degraded = []
@@ -290,13 +369,45 @@ def build(mailbox: bool | None = None):
         if failed:
             degraded.append(failed)
         plan = json.loads(acted.plan_json)
-
-        scam = state.get("report", {}).get("verdict") == "SCAM"
         state.update(stage="plan", explanation=explanation, plan=plan, used=[])
         save(ctx, sender, state)
-        hi = language == "hi"
+        return degraded
 
-        parts = []
+    async def explain_and_act(ctx: Context, sender: str, state: dict,
+                              only: str | None = None, intro: str = ""):
+        """Full answer, or only="rules" (meaning + rights) / "action" (steps + draft)."""
+        degraded = await build_plan(ctx, sender, state)
+        explanation, plan = state["explanation"], state["plan"]
+        scam = state.get("report", {}).get("verdict") == "SCAM"
+        hi = state.get("language", "en") == "hi"
+
+        parts = [intro] if intro else []
+        if only == "rules":
+            law = f" ({explanation['law']})" if explanation.get("law") else ""
+            parts.append(f"**{explanation['title']}**{law}")
+            parts.append(explanation["plain_explanation"])
+            if explanation.get("rights"):
+                parts.append(("**आपके अधिकार**" if hi else "**Your rights**") + "\n" + "\n".join(
+                    f"• {r}" for r in explanation["rights"]))
+            parts.append((DISCLAIMER_HI if hi else DISCLAIMER) + fallback_note(degraded))
+            await ctx.send(sender, cards.card_message(
+                "\n\n".join(parts), "detail", next_card(state)))
+            return
+        if only == "action":
+            parts.append(("**क्या करें**" if hi else "**What to do**") + "\n" + "\n".join(
+                f"{i}. {s}" for i, s in enumerate(plan["steps"], 1)))
+            if not scam:
+                parts.append(("**आपके जवाब का ड्राफ्ट** ([ब्रैकेट] वाली जगह भरें):\n```\n" if hi
+                              else "**Your draft reply** (fill in the [brackets]):\n```\n")
+                             + plan["draft"].strip() + "\n```")
+            if plan.get("portals"):
+                parts.append(("**सरकारी लिंक:** " if hi else "**Official links:** ")
+                             + ", ".join(plan["portals"]))
+            parts.append((DISCLAIMER_HI if hi else DISCLAIMER) + fallback_note(degraded))
+            await ctx.send(sender, cards.card_message(
+                "\n\n".join(parts), "detail", next_card(state)))
+            return
+
         if scam:
             parts.append(f"The message you got is most likely fake. Here is how a genuine "
                          f"**{explanation['title']}** works, so you can check safely:")
@@ -348,6 +459,29 @@ def build(mailbox: bool | None = None):
         await ctx.send(sender, cards.card_message(
             f"⏰ Done. I'll message you here on {', '.join(dates)} about **{title}** "
             f"(deadline {plan.get('deadline')}).", "detail", next_card(state)))
+
+    async def direct_step(ctx: Context, sender: str, route: str, text: str, state: dict):
+        """Skip the cards and give only the step the user asked for. Reader and
+        Verify still run quietly, so a scam is never missed."""
+        report = await check_notice(ctx, sender, text, state)
+        title = state["fields"].get("title") or "notice"
+        verdict = {
+            "SCAM": f"🚨 Quick check: this is a **scam** (risk {report['score']}/100). "
+                    "Don't click, pay or share an OTP.",
+            "SUSPICIOUS": f"⚠️ Quick check: this has scam warning signs "
+                          f"(risk {report['score']}/100).",
+        }.get(report["verdict"], f"✅ Quick check: no scam signals in this {title}.")
+        if route == "report":
+            await ctx.send(sender, cards.text_message(verdict))
+            await send_report_pack(ctx, sender, state)
+        elif route == "expert":
+            degraded = state["degraded"] + await build_plan(ctx, sender, state)
+            await ctx.send(sender, cards.text_message(
+                verdict + " Going straight to an expert, as you asked."
+                + fallback_note(degraded)))
+            await offer_expert(ctx, sender, state)
+        else:
+            await explain_and_act(ctx, sender, state, only=route, intro=verdict)
 
     async def offer_expert(ctx: Context, sender: str, state: dict):
         state["stage"] = "confirm_payment"
@@ -471,7 +605,13 @@ def build(mailbox: bool | None = None):
         await ctx.send(sender, cards.text_message(
             f"📷 I read this from your image ({how}):\n> " + preview.replace("\n", "\n> ")
             + "\n\nChecking it now…"))
-        await analyse_notice(ctx, sender, text, state)
+        route, _ = direct_route(user_text) if user_text.strip() else (None, "")
+        if not route and user_text.strip():
+            route = next((r for r, p in DIRECT_ROUTES if p.search(user_text)), None)
+        if route:
+            await direct_step(ctx, sender, route, text, state)
+        else:
+            await analyse_notice(ctx, sender, text, state)
 
     async def send_report_pack(ctx: Context, sender: str, state: dict):
         nf = NoticeFields.from_dict(state["fields"])
@@ -531,6 +671,8 @@ def build(mailbox: bool | None = None):
             elif act == "remind" and state.get("plan"):
                 await set_reminders(ctx, sender, state)
             elif act == "expert" and state.get("fields"):
+                if not state.get("plan"):
+                    await build_plan(ctx, sender, state)  # the expert reviews a draft
                 await offer_expert(ctx, sender, state)
             elif act == "report_scam" and state.get("fields"):
                 await send_report_pack(ctx, sender, state)
@@ -550,7 +692,22 @@ def build(mailbox: bool | None = None):
                 await ctx.send(sender, cards.text_message(
                     "All set. Send me another notice anytime. 🙏", end_session=True))
             elif looks_like_notice(text):
-                await analyse_notice(ctx, sender, text, state)
+                route, notice = direct_route(text)
+                if route:
+                    await direct_step(ctx, sender, route, notice, state)
+                else:
+                    await analyse_notice(ctx, sender, text, state)
+            elif wants_expert(text) and state.get("fields"):
+                if not state.get("plan"):
+                    await build_plan(ctx, sender, state)
+                await offer_expert(ctx, sender, state)
+            elif wants_expert(text):
+                await ctx.send(sender, cards.text_message(
+                    "Sure. Paste the SMS or notice after the word **expert**, like "
+                    "*\"expert: <your SMS>\"*, or upload a photo with the caption "
+                    "*\"expert\"*, and I'll take you straight to a verified CA or lawyer "
+                    f"(Rs {config.EXPERT_FEE_INR}). The same works for *rules:*, "
+                    "*draft:* and *report:*."))
             elif state.get("plan") and state["language"] != "en" and re.search(r"hindi", text, re.I):
                 await explain_and_act(ctx, sender, state)
             else:

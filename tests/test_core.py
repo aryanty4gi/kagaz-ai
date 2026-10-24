@@ -449,3 +449,23 @@ def test_specialists_claim_a_handle_and_fall_back_if_taken(monkeypatch):
 
     assert asyncio.run(connect_mailbox(agent, Ctx()))
     assert tried == ["kagazrules", None]
+
+
+def test_direct_routes_skip_to_one_agent():
+    from agents.coordinator_agent import direct_route
+
+    from pathlib import Path
+    root = Path(__file__).resolve().parent.parent
+    sms = (root / "samples" / "01_fake_echallan_sms.txt").read_text()
+    assert direct_route("I know it's a scam, just tell me the rules in Hindi: " + sms) \
+        == ("rules", sms.strip())
+    assert direct_route("draft: " + sms)[0] == "action"
+    assert direct_route("report: " + sms)[0] == "report"
+    assert direct_route("expert: " + sms)[0] == "expert"
+    assert direct_route(sms.strip() + "\nI just want an expert")[0] == "expert"
+    assert direct_route("@kagazrules " + sms)[0] == "rules"
+    # Plain notices, and notices that mention "law" or "marketplace", go the normal way.
+    for f in sorted((root / "samples").glob("*.txt")):
+        assert direct_route(f.read_text())[0] is None, f.name
+    assert direct_route("Dear customer as per law your power will be cut: call 9876543210")[0] \
+        is None
