@@ -58,6 +58,15 @@ A quick scam check still runs quietly on every shortcut, so a scam is never miss
 specialist also works **on its own**: `@kagazverify`, `@kagazreader`, `@kagazrules`,
 `@kagazaction`, `@kagazexpert`, `@kagazmarketplace`.
 
+### In short (for judges)
+
+| | |
+|---|---|
+| **Problem** | Indians lost ₹22,845 crore to cyber fraud in 2024, much of it through fake notices and SMS (e-challan, tax refund, KYC, "digital arrest"). Real notices are in legal language, so people panic, ignore them and miss deadlines. |
+| **Target users** | Ordinary citizens, first-time taxpayers, small shop owners, students and parents, and older family members who get an official notice or a suspicious SMS, in English or Hindi. |
+| **Outcome** | In one ASI:One chat: a scam verdict with reasons, a ready cybercrime complaint and family warning, a plain explanation with your rights, the official steps, a drafted reply letter, deadline reminders, and a ₹99 review by a verified CA or lawyer, paid through the Payment Protocol. |
+| **How** | 7 Fetch.ai uAgents on Agentverse: @kagaz (main agent) plans and routes; Reader, Verify, Rules, Action, Expert and Marketplace each do one job and also work alone. Rules is retrieval-grounded (RAG) on a curated knowledge base of 9 notice types, with the ASI:One model writing the answer. |
+
 ## Try it live (no install)
 
 Kagaz runs 24/7 on Agentverse. You chat with it inside ASI:One:
