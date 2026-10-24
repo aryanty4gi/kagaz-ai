@@ -51,6 +51,7 @@ def explain(fields: NoticeFields, language: str = "en") -> dict:
         f"Text: {fields.raw_text[:2500]}"
     )
     steps = list(kb["steps"])
+    rights = list(kb["rights"])
     if language == "hi":
         # Translate the steps in parallel with the explanation, so a Hindi
         # answer is Hindi all the way through without doubling the wait.
@@ -58,14 +59,15 @@ def explain(fields: NoticeFields, language: str = "en") -> dict:
             # Copy the context so the "LLM offline" flag still applies in the threads.
             plain_job = pool.submit(contextvars.copy_context().run,
                                     llm.complete, system, source, 350)
+            # Rights are translated in the same call (shown by the Rules agent).
             steps_job = pool.submit(contextvars.copy_context().run, translate_lines,
-                                    steps + ([reason] if reason else []))
+                                    steps + rights + ([reason] if reason else []))
             plain = plain_job.result()
             translated = steps_job.result()
         if reason:
             reason = translated[-1]
             translated = translated[:-1]
-        steps = translated
+        steps, rights = translated[:len(steps)], translated[len(steps):]
     else:
         plain = llm.complete(system, source, max_tokens=350)
     if not plain:
@@ -80,7 +82,7 @@ def explain(fields: NoticeFields, language: str = "en") -> dict:
         "deadline_rule": kb["deadline_rule"],
         "days_left": remaining,
         "steps": steps,
-        "rights": kb["rights"],
+        "rights": rights,
         "portals": kb["official_portals"],
         "escalate": escalate,
         "escalate_reason": reason,

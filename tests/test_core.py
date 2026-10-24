@@ -344,6 +344,7 @@ def test_hindi_explanation_translates_steps(monkeypatch):
     fields = reader.extract(load("03_income_tax_143_1.txt"))
     out = rules.explain(fields, "hi")
     assert out["steps"] and all(s.startswith("हिंदी कदम") for s in out["steps"])
+    assert out["rights"] and all(r.startswith("हिंदी कदम") for r in out["rights"])
     # A broken translation falls back to the English steps.
     monkeypatch.setattr(llm, "complete", lambda *a, **k: "oops")
     assert rules.translate_lines(["Pay on incometax.gov.in"]) == ["Pay on incometax.gov.in"]
