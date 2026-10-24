@@ -66,6 +66,8 @@ the Agent Chat Protocol, ASI:One Interactive Cards and the Agent Payment Protoco
 
 ## What's inside
 
+> 📸 **More screenshots:** every step, from scam check to expert review and the solo agents, in [docs/SCREENSHOTS.md](docs/SCREENSHOTS.md).
+
 <p align="center"><img src="assets/readme/features.png" alt="Features: scam detection, 9 notice types, Hindi mode, screenshot OCR, scam report pack, reminders, Rs 99 expert review, Verify as a service" width="100%"></p>
 
 ### A scam, caught
