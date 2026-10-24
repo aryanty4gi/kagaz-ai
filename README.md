@@ -16,6 +16,7 @@
 </p>
 
 <p align="center">
+  <a href="https://youtu.be/SwnIXqjWArc"><b>▶ Watch the demo video</b></a> ·
   <a href="https://asi1.ai"><b>Try it on ASI:One</b></a> ·
   <a href="https://agentverse.ai/agents/details/agent1qwvc8wrwftwgzlanhhc6k5pq55ukqet5yw7jsej6aqyrlt3ull46u4zrqya/profile"><b>Agentverse profile</b></a> ·
   <a href="#agent-architecture"><b>How it works</b></a> ·
@@ -68,6 +69,8 @@ specialist also works **on its own**: `@kagazverify`, `@kagazreader`, `@kagazrul
 | **How** | 7 Fetch.ai uAgents on Agentverse: @kagaz (main agent) plans and routes; Reader, Verify, Rules, Action, Expert and Marketplace each do one job and also work alone. Rules is retrieval-grounded (RAG) on a curated knowledge base of 9 notice types, with the ASI:One model writing the answer. |
 
 ## Try it live (no install)
+
+▶ **Demo video (4.5 min):** [https://youtu.be/SwnIXqjWArc](https://youtu.be/SwnIXqjWArc)
 
 Kagaz runs 24/7 on Agentverse. You chat with it inside ASI:One:
 
