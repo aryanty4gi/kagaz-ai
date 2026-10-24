@@ -25,7 +25,8 @@ USE_MAILBOX = os.getenv("KAGAZ_USE_MAILBOX", "true").lower() == "true"
 SPECIALIST_MAILBOX = os.getenv("KAGAZ_SPECIALIST_MAILBOX", str(USE_MAILBOX)).lower() == "true"
 # Agentverse API key (agentverse.ai -> Profile -> API Keys). When set, each
 # agent creates its own Agentverse mailbox on start, so no inspector clicks.
-AGENTVERSE_API_KEY = os.getenv("AGENTVERSE_API_KEY", "")
+# Pasted keys often carry a trailing newline or space, which HTTP headers reject.
+AGENTVERSE_API_KEY = "".join(os.getenv("AGENTVERSE_API_KEY", "").split())
 
 # Turn off live internet lookups (domain age checks) for offline tests.
 ONLINE_CHECKS = os.getenv("KAGAZ_ONLINE_CHECKS", "true").lower() == "true"

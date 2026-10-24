@@ -408,3 +408,14 @@ def test_agent_mention_is_removed_from_chat_text():
     msg = "**@agent1qwuwfl3hrczx3qzmevuftewx5znkrway5533e3ah33c74led46zykkhskge** Your KYC expired, update: bit.ly/kyc9"
     assert strip_mentions(msg) == "Your KYC expired, update: bit.ly/kyc9"
     assert strip_mentions("@kagaz pay to help@okaxis now") == "pay to help@okaxis now"
+
+
+def test_agentverse_key_is_cleaned(monkeypatch):
+    import importlib
+
+    from kagaz import config
+
+    monkeypatch.setenv("AGENTVERSE_API_KEY", " abc.def\n")
+    assert importlib.reload(config).AGENTVERSE_API_KEY == "abc.def"
+    monkeypatch.delenv("AGENTVERSE_API_KEY")
+    importlib.reload(config)
