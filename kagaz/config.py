@@ -22,6 +22,7 @@ USE_MAILBOX = os.getenv("KAGAZ_USE_MAILBOX", "true").lower() == "true"
 # Give every specialist its own mailbox too, so each one can be chatted with
 # on its own from ASI:One. Inside one process (run_local.py) the coordinator
 # still reaches them directly, so this adds no delay to the main flow.
+USE_HANDLES = os.getenv("KAGAZ_HANDLES", "true").lower() == "true"
 SPECIALIST_MAILBOX = os.getenv("KAGAZ_SPECIALIST_MAILBOX", str(USE_MAILBOX)).lower() == "true"
 # Agentverse API key (agentverse.ai -> Profile -> API Keys). When set, each
 # agent creates its own Agentverse mailbox on start, so no inspector clicks.
@@ -39,12 +40,12 @@ EXPERT_FEE_INR = os.getenv("KAGAZ_EXPERT_FEE_INR", "99")
 
 AGENTS = {
     "coordinator": {"name": "kagaz_coordinator", "port": 8100},
-    "reader": {"name": "kagaz_reader", "port": 8101},
-    "verify": {"name": "kagaz_verify", "port": 8102},
-    "rules": {"name": "kagaz_rules", "port": 8103},
-    "action": {"name": "kagaz_action", "port": 8104},
-    "expert": {"name": "kagaz_expert", "port": 8105},
-    "marketplace": {"name": "kagaz_marketplace", "port": 8106},
+    "reader": {"name": "kagaz_reader", "handle": "kagazreader", "port": 8101},
+    "verify": {"name": "kagaz_verify", "handle": "kagazverify", "port": 8102},
+    "rules": {"name": "kagaz_rules", "handle": "kagazrules", "port": 8103},
+    "action": {"name": "kagaz_action", "handle": "kagazaction", "port": 8104},
+    "expert": {"name": "kagaz_expert", "handle": "kagazexpert", "port": 8105},
+    "marketplace": {"name": "kagaz_marketplace", "handle": "kagazmarketplace", "port": 8106},
 }
 
 

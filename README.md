@@ -233,6 +233,7 @@ environment variables, and set `KAGAZ_KEEPALIVE_URL` if the host sleeps when idl
 
 
 Talk to Kagaz on ASI:One through the **Coordinator** for the full flow. **Every specialist also works on its own**: mention just that agent on ASI:One (or open its Agentverse profile and click *Chat with Agent*) and it gives a complete answer for its job, for example send a scam SMS straight to Kagaz Verify.
+On ASI:One the specialists answer to `@kagazverify`, `@kagazreader`, `@kagazrules`, `@kagazaction`, `@kagazexpert` and `@kagazmarketplace`.
 Each address is fixed by its private seed.
 
 | Agent | Address | Agentverse profile | Send it on its own |

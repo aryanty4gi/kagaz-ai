@@ -27,6 +27,9 @@ def make_agent(role: str, description: str, mailbox: bool | None = None,
         seed=seed or config.seed_for(role),
         port=spec["port"],
         description=description,
+        # Short @name on ASI:One/Agentverse (e.g. @kagazverify); the
+        # coordinator keeps the @kagaz handle set by hand.
+        handle=(spec.get("handle") if config.USE_HANDLES else None),
         readme_path=str(readme) if readme.exists() else None,
         publish_agent_details=True,
         avatar_url=(os.getenv(f"KAGAZ_{role.upper()}_AVATAR_URL")
@@ -62,18 +65,28 @@ async def connect_mailbox(agent: Agent, ctx: Context) -> bool:
         from uagents.mailbox import AgentverseConnectRequest, register_in_agentverse
         from uagents_core.registration import RegistrationRequest
 
-        registration = RegistrationRequest(
-            address=agent.address, name=agent.name, handle=getattr(agent, "_handle", None),
-            url=None, profile=agent._build_registration_profile(),
-            endpoints=agent._endpoints, protocols=list(agent.protocols.keys()),
-            metadata=agent.metadata)
-        result = await register_in_agentverse(
-            request=AgentverseConnectRequest(user_token=config.AGENTVERSE_API_KEY,
-                                             agent_type="mailbox"),
-            identity=agent._identity, prefix=agent._prefix,
-            agentverse=agent._agentverse, agent_details=registration)
+        async def register(handle):
+            registration = RegistrationRequest(
+                address=agent.address, name=agent.name, handle=handle,
+                url=None, profile=agent._build_registration_profile(),
+                endpoints=agent._endpoints, protocols=list(agent.protocols.keys()),
+                metadata=agent.metadata)
+            return await register_in_agentverse(
+                request=AgentverseConnectRequest(user_token=config.AGENTVERSE_API_KEY,
+                                                 agent_type="mailbox"),
+                identity=agent._identity, prefix=agent._prefix,
+                agentverse=agent._agentverse, agent_details=registration)
+
+        handle = getattr(agent, "_handle", None)
+        result = await register(handle)
+        if not result.success and handle:
+            # The @handle may already belong to another agent; connect without it.
+            ctx.logger.warning(f"Could not claim @{handle} ({result.detail}); "
+                               "connecting without a handle")
+            handle = None
+            result = await register(None)
         if result.success:
-            ctx.logger.info("Agentverse mailbox connected")
+            ctx.logger.info("Agentverse mailbox connected" + (f" as @{handle}" if handle else ""))
         else:
             ctx.logger.warning(f"Agentverse mailbox not connected: {result.detail}")
         return bool(result.success)

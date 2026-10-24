@@ -419,3 +419,33 @@ def test_agentverse_key_is_cleaned(monkeypatch):
     assert importlib.reload(config).AGENTVERSE_API_KEY == "abc.def"
     monkeypatch.delenv("AGENTVERSE_API_KEY")
     importlib.reload(config)
+
+
+def test_specialists_claim_a_handle_and_fall_back_if_taken(monkeypatch):
+    import asyncio
+    import logging
+
+    import uagents.mailbox as mailbox
+
+    from agents.common import connect_mailbox, make_agent
+
+    agent = make_agent("rules", "test", mailbox=False, seed="kagaz-handle-test-seed-1234")
+    assert agent._handle == "kagazrules"
+    assert make_agent("coordinator", "test", mailbox=False,
+                      seed="kagaz-handle-test-seed-5678")._handle is None
+
+    tried = []
+
+    async def fake_register(request, identity, prefix, agentverse, agent_details):
+        tried.append(agent_details.handle)
+        if agent_details.handle:
+            return mailbox.RegistrationResponse(success=False, detail="handle already taken")
+        return mailbox.RegistrationResponse(success=True)
+
+    monkeypatch.setattr(mailbox, "register_in_agentverse", fake_register)
+
+    class Ctx:
+        logger = logging.getLogger("test")
+
+    assert asyncio.run(connect_mailbox(agent, Ctx()))
+    assert tried == ["kagazrules", None]
