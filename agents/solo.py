@@ -25,7 +25,7 @@ from uagents_core.contrib.protocols.chat import (
 from uagents_core.identity import Identity
 
 from kagaz import cards, config
-from kagaz.core import ocr, reader, verify
+from kagaz.core import ocr, reader, talk, verify
 from kagaz.core.reader import NoticeFields
 
 Handler = Callable[[Context, str, str, str], Awaitable[str]]
@@ -95,6 +95,14 @@ def chat_protocol(role: str, welcome: str, handler: Handler, images: bool = True
             preview = read if len(read) <= 300 else read[:300] + " …"
             note = "📷 I read this from your image:\n> " + preview.replace("\n", "\n> ") + "\n\n"
             text = (text + "\n" + read).strip()
+        if not note and role != "marketplace":
+            if talk.is_greeting(text):
+                await ctx.send(sender, cards.text_message(talk.greet(role, welcome, language)))
+                return
+            if talk.is_question(text):
+                reply = await asyncio.to_thread(talk.answer, text, role, language)
+                await ctx.send(sender, cards.text_message((reply or welcome) + FOOTER))
+                return
         if len(text) < min_chars:
             await ctx.send(sender, cards.text_message(welcome))
             return

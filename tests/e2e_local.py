@@ -226,6 +226,10 @@ SOLO_CHECKS = [
     ("coordinator", "I know it's a scam, just tell me the rules in Hindi: "
      + SAMPLES["01_fake_echallan_sms.txt"], ["Quick check", "scam", "आपके अधिकार"]),
     ("coordinator", "draft in English: " + ELEC, ["Quick check", "What to do", "Your draft reply"]),
+    # Casual chat: a greeting, and a general question (offline: falls back to the welcome).
+    ("coordinator", "hi", ["Hi! 👋", "Paste the notice"]),
+    ("expert", "hello", ["Hi! 👋"]),
+    ("expert", "Can my landlord cut my electricity without notice?", ["Expert Desk"]),
 ]
 solo_user = Agent(name="solo_user", seed="kagaz-e2e-solo-user", port=8196,
                   endpoint=["http://127.0.0.1:8196/submit"])

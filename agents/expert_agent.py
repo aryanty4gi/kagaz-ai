@@ -43,7 +43,7 @@ from agents import solo
 from agents.common import make_agent
 from kagaz import config, llm
 from kagaz.cards import text_message
-from kagaz.core import action, expert, knowledge, rules
+from kagaz.core import action, expert, knowledge, rules, talk
 from kagaz.core.reader import NoticeFields
 from kagaz.messages import (
     ExpertReviewRequest, ExpertReviewResult, RegisterExpert, RegisterExpertAck,
@@ -258,6 +258,12 @@ def build(mailbox: bool | None = None, profile: dict | None = None):
             "Answer one with `review <case_id>: <your review>`."))
 
     async def desk_review(text: str) -> str:
+        language = "hi" if re.search(r"[ऀ-ॿ]", text) else "en"
+        if talk.is_greeting(text):
+            return talk.greet("expert", DESK_WELCOME, language)
+        if talk.is_question(text):
+            reply = await asyncio.to_thread(talk.answer, text, "expert", language)
+            return (reply + solo.FOOTER) if reply else DESK_WELCOME
         if len(text) < 40:
             return DESK_WELCOME
         parts = re.split(r"\bdraft\s*:", text, maxsplit=1, flags=re.IGNORECASE)

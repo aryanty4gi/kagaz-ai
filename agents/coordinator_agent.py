@@ -41,7 +41,7 @@ from agents import solo
 from agents.common import make_agent
 from kagaz import cards, config, llm
 from kagaz import payments as gateway
-from kagaz.core import action, knowledge, ocr, reader, report as scam_report, rules, verify
+from kagaz.core import action, knowledge, ocr, reader, report as scam_report, rules, talk, verify
 from kagaz.core.reader import NoticeFields
 from kagaz.messages import (
     ActionRequest, ActionResult, ExpertJobRequest, ExpertJobResult,
@@ -691,6 +691,14 @@ def build(mailbox: bool | None = None):
                 save(ctx, sender, {"language": state.get("language", "en")})
                 await ctx.send(sender, cards.text_message(
                     "All set. Send me another notice anytime. 🙏", end_session=True))
+            elif talk.is_greeting(text):
+                await ctx.send(sender, cards.text_message(
+                    talk.greet("coordinator", WELCOME, state["language"])))
+            elif talk.is_question(text) and not wants_expert(text) \
+                    and not direct_route(text)[0]:
+                reply = await asyncio.to_thread(
+                    talk.answer, text, "coordinator", state["language"])
+                await ctx.send(sender, cards.text_message(reply or WELCOME))
             elif looks_like_notice(text):
                 route, notice = direct_route(text)
                 if route:

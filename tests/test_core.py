@@ -469,3 +469,20 @@ def test_direct_routes_skip_to_one_agent():
         assert direct_route(f.read_text())[0] is None, f.name
     assert direct_route("Dear customer as per law your power will be cut: call 9876543210")[0] \
         is None
+
+
+def test_casual_chat_greets_and_answers_questions(monkeypatch):
+    from kagaz import llm
+    from kagaz.core import talk
+
+    assert talk.is_greeting("hi") and talk.is_greeting("Namaste 🙏")
+    assert not talk.is_greeting("hi I got this SMS: pay Rs 500 at http://x.top")
+    assert talk.is_question("Can my landlord cut my electricity?")
+    assert talk.is_question("kya bijli wala bina notice ke connection kaat sakta hai")
+    # Pasted SMS and notices are never treated as a casual question.
+    assert not talk.is_question("Your KYC expired, update: bit.ly/kyc9")
+    assert not talk.is_question("Did you win? Claim your prize of Rs 25000 now")
+    monkeypatch.setattr(llm, "complete", lambda system, user, max_tokens=0: "Short answer.")
+    assert talk.answer("Can my landlord cut my electricity?", "expert") == "Short answer."
+    monkeypatch.setattr(llm, "complete", lambda system, user, max_tokens=0: None)
+    assert talk.answer("Can my landlord cut my electricity?", "expert") is None
