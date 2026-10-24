@@ -58,7 +58,7 @@ def is_question(text: str) -> bool:
 
 def greet(role: str, welcome: str, language: str = "en") -> str:
     hello = "नमस्ते! 🙏 " if language == "hi" else "Hi! 👋 "
-    return hello + welcome
+    return hello + re.sub(r"^[^\w*@]+", "", welcome)  # no double "👋"
 
 
 def answer(question: str, role: str, language: str = "en") -> str | None:

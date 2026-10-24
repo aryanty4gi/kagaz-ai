@@ -227,7 +227,7 @@ SOLO_CHECKS = [
      + SAMPLES["01_fake_echallan_sms.txt"], ["Quick check", "scam", "आपके अधिकार"]),
     ("coordinator", "draft in English: " + ELEC, ["Quick check", "What to do", "Your draft reply"]),
     # Casual chat: a greeting, and a general question (offline: falls back to the welcome).
-    ("coordinator", "hi", ["Hi! 👋", "Paste the notice"]),
+    ("coordinator", "hi", ["Hi! 👋 I'm", "Paste the notice"]),
     ("expert", "hello", ["Hi! 👋"]),
     ("expert", "Can my landlord cut my electricity without notice?", ["Expert Desk"]),
 ]
