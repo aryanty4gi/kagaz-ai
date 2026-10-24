@@ -476,6 +476,7 @@ def test_casual_chat_greets_and_answers_questions(monkeypatch):
     from kagaz.core import talk
 
     assert talk.is_greeting("hi") and talk.is_greeting("Namaste 🙏")
+    assert talk.is_greeting("hey there how you doing")
     assert not talk.is_greeting("hi I got this SMS: pay Rs 500 at http://x.top")
     assert talk.is_question("Can my landlord cut my electricity?")
     assert talk.is_question("kya bijli wala bina notice ke connection kaat sakta hai")

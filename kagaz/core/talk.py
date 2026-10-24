@@ -29,8 +29,18 @@ ROLE_HINT = {
 }
 
 
+GREETING_START = re.compile(
+    r"^\s*(hi+|hello+|hey+|namaste|namaskar|good (?:morning|afternoon|evening)|yo|sup)\b",
+    re.IGNORECASE)
+
+
 def is_greeting(text: str) -> bool:
-    return bool(GREETING.match(text or ""))
+    """ "hi", or a short hello like "hey there how you doing" (no notice in it)."""
+    text = text or ""
+    if GREETING.match(text):
+        return True
+    return bool(GREETING_START.match(text)) and len(text.split()) <= 7 and not re.search(
+        r"\d|https?://|\.[a-z]{2,4}\b|₹", text, re.IGNORECASE)
 
 
 def is_question(text: str) -> bool:
