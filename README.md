@@ -243,7 +243,7 @@ Each address is fixed by its private seed.
 | Kagaz Rules | `agent1qwsh25v2m9xut4mklgt6scuzn3prxrs5d7qh88ttkgcshtg0rl6yu577xvj` | [profile](https://agentverse.ai/agents/details/agent1qwsh25v2m9xut4mklgt6scuzn3prxrs5d7qh88ttkgcshtg0rl6yu577xvj/profile) | a notice: meaning, rights, deadline rule (add "in Hindi") |
 | Kagaz Action | `agent1q2wf6asmghlw3pkc7zv58tx3ncln0fpf9pfhmpcdsrkv5uj4rgawkzjucq3` | [profile](https://agentverse.ai/agents/details/agent1q2wf6asmghlw3pkc7zv58tx3ncln0fpf9pfhmpcdsrkv5uj4rgawkzjucq3/profile) | a notice: steps, reply letter, reminder dates |
 | Kagaz Expert Desk | `agent1qda68rafn0axayysd926uwdqzzpsqxdgapc4ykqrwrapcrdv7aqlg8xch3l` | [profile](https://agentverse.ai/agents/details/agent1qda68rafn0axayysd926uwdqzzpsqxdgapc4ykqrwrapcrdv7aqlg8xch3l/profile) | a notice (+ `Draft:` your reply): expert-style review |
-| Kagaz Marketplace | shown on the [status page](https://kagaz-ai-wrgn.onrender.com) | own profile (address on the status page) | "hi": approved experts; a notice: who'd review it |
+| Kagaz Marketplace | `agent1qw907tu0h3es6vnr9rstd4ql6ckd57f80a5d9h2c8mmyf36z9pv5c2tynu3` | [profile](https://agentverse.ai/agents/details/agent1qw907tu0h3es6vnr9rstd4ql6ckd57f80a5d9h2c8mmyf36z9pv5c2tynu3/profile) | "hi": approved experts; a notice: who'd review it |
 
 ## Business model
 
