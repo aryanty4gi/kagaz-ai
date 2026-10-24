@@ -40,6 +40,24 @@ a bank letter, a GST notice, a court summons, a school fee notice. A team of sev
 
 <p align="center"><img src="assets/readme/flow.png" alt="How it works: paste or upload, verify, explain, act" width="100%"></p>
 
+### One main agent, no queue
+
+**@kagaz (ASI-Kagaz) is the main agent.** It runs the whole team for you, but you never have to
+wait in line: tell it what you want and it jumps straight to that agent.
+
+| You type to @kagaz | What happens |
+|---|---|
+| Any notice, SMS or photo | Full flow: check → explain → draft → reminders → expert |
+| `rules in Hindi: <SMS>` | Straight to the **Rules** agent: meaning and rights, in Hindi |
+| `draft: <notice>` | Straight to the **Action** agent: steps and reply letter |
+| `report: <scam SMS>` | Straight to the complaint + family warning |
+| `expert: <SMS>` or *"I know it's a scam, I just want an expert"* | Straight to the Rs 99 **expert review** (Marketplace) |
+| `hi`, or a question like *"Can my landlord cut my electricity?"* | A friendly reply from the **ASI:One model** |
+
+A quick scam check still runs quietly on every shortcut, so a scam is never missed. And every
+specialist also works **on its own**: `@kagazverify`, `@kagazreader`, `@kagazrules`,
+`@kagazaction`, `@kagazexpert`, `@kagazmarketplace`.
+
 ## Try it live (no install)
 
 Kagaz runs 24/7 on Agentverse. You chat with it inside ASI:One:
