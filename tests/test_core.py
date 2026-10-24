@@ -399,3 +399,11 @@ def test_mailbox_auto_connect_skips_coordinator_by_default(monkeypatch):
     assert should_auto_connect("verify")
     monkeypatch.setenv("KAGAZ_AUTO_CONNECT", "false")
     assert not should_auto_connect("rules")
+
+
+def test_agent_mention_is_removed_from_chat_text():
+    from agents.solo import strip_mentions
+
+    msg = "**@agent1qwuwfl3hrczx3qzmevuftewx5znkrway5533e3ah33c74led46zykkhskge** Your KYC expired, update: bit.ly/kyc9"
+    assert strip_mentions(msg) == "Your KYC expired, update: bit.ly/kyc9"
+    assert strip_mentions("@kagaz pay to help@okaxis now") == "pay to help@okaxis now"

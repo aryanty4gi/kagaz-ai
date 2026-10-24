@@ -27,7 +27,6 @@ from uagents import Context, Protocol
 from uagents_core.contrib.protocols.chat import (
     ChatAcknowledgement,
     ChatMessage,
-    TextContent,
     chat_protocol_spec,
 )
 from uagents_core.contrib.protocols.payment import (
@@ -214,7 +213,7 @@ def build(mailbox: bool | None = None, profile: dict | None = None):
     async def on_chat(ctx: Context, sender: str, msg: ChatMessage):
         await ctx.send(sender, ChatAcknowledgement(timestamp=datetime.now(timezone.utc),
                                                    acknowledged_msg_id=msg.msg_id))
-        text = " ".join(c.text for c in msg.content if isinstance(c, TextContent)).strip()
+        text = solo.chat_text(msg)
         if not human:
             # Used on its own from ASI:One: review the person's notice and draft.
             await ctx.send(sender, text_message(await desk_review(text)))

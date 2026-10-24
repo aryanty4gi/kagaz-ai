@@ -24,7 +24,6 @@ from uagents_core.contrib.protocols.chat import (
     MetadataContent,
     ResourceContent,
     StartSessionContent,
-    TextContent,
     chat_protocol_spec,
 )
 from uagents_core.identity import Identity
@@ -38,6 +37,7 @@ from uagents_core.contrib.protocols.payment import (
     payment_protocol_spec,
 )
 
+from agents import solo
 from agents.common import make_agent
 from kagaz import cards, config, llm
 from kagaz import payments as gateway
@@ -501,7 +501,7 @@ def build(mailbox: bool | None = None):
             await ctx.send(sender, ChatMessage(
                 timestamp=datetime.now(timezone.utc), msg_id=uuid4(),
                 content=[MetadataContent(type="metadata", metadata={"attachments": "true"})]))
-        text = " ".join(c.text for c in msg.content if isinstance(c, TextContent)).strip()
+        text = solo.chat_text(msg)
         resources = [c for c in msg.content if isinstance(c, ResourceContent)]
         state = load(ctx, sender)
         state["language"] = detect_language(text, state.get("language", "en"))

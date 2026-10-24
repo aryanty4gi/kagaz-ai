@@ -7,6 +7,7 @@ complete answer for that agent's job, without going through the coordinator.
 """
 
 import asyncio
+import re
 from datetime import datetime, timezone
 from typing import Awaitable, Callable
 from uuid import uuid4
@@ -33,8 +34,17 @@ FOOTER = ("\n\n---\n_Part of the Kagaz AI team. For the full flow (scam check, "
           "explanation, reply draft, reminders, expert review) chat with **@kagaz**._")
 
 
+# ASI:One / Agentverse put the agent's @handle or @address in front of the
+# message (sometimes in bold). It is not part of the notice, so drop it.
+MENTION_RE = re.compile(r"(?<!\S)\*{0,2}@[A-Za-z0-9_\-]+\*{0,2}")
+
+
+def strip_mentions(text: str) -> str:
+    return re.sub(r"[ \t]{2,}", " ", MENTION_RE.sub("", text)).strip()
+
+
 def chat_text(msg: ChatMessage) -> str:
-    return " ".join(c.text for c in msg.content if isinstance(c, TextContent)).strip()
+    return strip_mentions(" ".join(c.text for c in msg.content if isinstance(c, TextContent)))
 
 
 def image_text(item: ResourceContent, identity: Identity) -> str:
