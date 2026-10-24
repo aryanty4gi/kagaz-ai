@@ -3,7 +3,7 @@
 import os
 from pathlib import Path
 
-from uagents import Agent
+from uagents import Agent, Context
 
 from kagaz import config
 
@@ -39,4 +39,44 @@ def make_agent(role: str, description: str, mailbox: bool | None = None,
         kwargs["mailbox"] = True
     else:
         kwargs["endpoint"] = [f"http://127.0.0.1:{spec['port']}/submit"]
-    return Agent(**kwargs)
+    agent = Agent(**kwargs)
+    if use_mailbox and config.AGENTVERSE_API_KEY and should_auto_connect(role):
+        @agent.on_event("startup")
+        async def _connect(ctx: Context):
+            await connect_mailbox(agent, ctx)
+    return agent
+
+
+def should_auto_connect(role: str) -> bool:
+    # The coordinator's mailbox already exists and works, so leave it alone
+    # unless asked (KAGAZ_CONNECT_COORDINATOR=true).
+    if role == "coordinator":
+        return os.getenv("KAGAZ_CONNECT_COORDINATOR", "false").lower() == "true"
+    return os.getenv("KAGAZ_AUTO_CONNECT", "true").lower() == "true"
+
+
+async def connect_mailbox(agent: Agent, ctx: Context) -> bool:
+    """Create (or refresh) this agent's Agentverse mailbox and profile, like
+    clicking Connect -> Mailbox in the inspector. Never raises."""
+    try:
+        from uagents.mailbox import AgentverseConnectRequest, register_in_agentverse
+        from uagents_core.registration import RegistrationRequest
+
+        registration = RegistrationRequest(
+            address=agent.address, name=agent.name, handle=getattr(agent, "_handle", None),
+            url=None, profile=agent._build_registration_profile(),
+            endpoints=agent._endpoints, protocols=list(agent.protocols.keys()),
+            metadata=agent.metadata)
+        result = await register_in_agentverse(
+            request=AgentverseConnectRequest(user_token=config.AGENTVERSE_API_KEY,
+                                             agent_type="mailbox"),
+            identity=agent._identity, prefix=agent._prefix,
+            agentverse=agent._agentverse, agent_details=registration)
+        if result.success:
+            ctx.logger.info("Agentverse mailbox connected")
+        else:
+            ctx.logger.warning(f"Agentverse mailbox not connected: {result.detail}")
+        return bool(result.success)
+    except Exception as err:
+        ctx.logger.warning(f"Agentverse mailbox connect failed: {err}")
+        return False

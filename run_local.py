@@ -2,8 +2,10 @@
 
     python run_local.py
 
-The coordinator connects to its Agentverse mailbox (so ASI:One can reach it)
-unless KAGAZ_USE_MAILBOX=false. Specialists talk to the coordinator in-process.
+Every agent connects to its own Agentverse mailbox (so ASI:One can reach the
+coordinator and each specialist on its own) unless KAGAZ_USE_MAILBOX=false.
+Set KAGAZ_SPECIALIST_MAILBOX=false to keep the specialists local-only.
+Inside this process the coordinator reaches the specialists directly.
 For one process per agent, run each file in agents/ separately instead.
 """
 
@@ -20,14 +22,15 @@ from kagaz import config
 
 def build_all():
     mailbox = config.USE_MAILBOX
+    solo = mailbox and config.SPECIALIST_MAILBOX
     return [
         coordinator_agent.build(mailbox),
-        reader_agent.build(False),
-        verify_agent.build(False),
-        rules_agent.build(False),
-        action_agent.build(False),
-        expert_agent.build(False),
-        marketplace_agent.build(False),
+        reader_agent.build(solo),
+        verify_agent.build(solo),
+        rules_agent.build(solo),
+        action_agent.build(solo),
+        expert_agent.build(solo),
+        marketplace_agent.build(solo),
     ]
 
 

@@ -9,6 +9,8 @@ Scenario B (genuine): electricity notice -> review card -> proceed -> remind
                        gets the paid job, and answers it over chat)
 Scenario D (reuse):   an outside "SMS Shield" agent calls the Verify agent directly
 Scenario C (image):   screenshot of a "digital arrest" SMS -> OCR -> scam card
+Scenario E (solo):    a second user chats with each specialist directly (no
+                      coordinator) and gets a full answer from each one
 The simulated user clicks card buttons by replying with each CTA's selection
 JSON, exactly as ASI:One does for a direct @mention.
 """
@@ -208,20 +210,93 @@ async def on_reply(ctx: Context, sender: str, msg: ChatMessage):
     await advance(ctx)
 
 
+# Scenario E: each specialist used on its own, like @mentioning it in ASI:One.
+ELEC = SAMPLES["04_electricity_disconnection.txt"]
+SOLO_CHECKS = [
+    ("verify", SAMPLES["01_fake_echallan_sms.txt"], ["Likely SCAM", "cybercrime.gov.in"]),
+    ("verify", None, ["I read this from your image", "Likely SCAM"]),
+    ("reader", ELEC, ["Here is what this notice says", "₹6,240"]),
+    ("rules", ELEC, ["Electricity disconnection notice", "Your rights", "What to do"]),
+    ("rules", ELEC + "\nin Hindi", ["आपके अधिकार"]),
+    ("action", ELEC, ["Action plan", "Your draft reply", "reminder dates"]),
+    ("expert", ELEC, ["Expert review", "Draft reply I prepared", "Review"]),
+    ("marketplace", "hi", ["Kagaz Expert Marketplace", "Approved experts", "EXPERTS.md"]),
+    ("marketplace", ELEC, ["Best expert for this Electricity disconnection notice", "Test CA"]),
+]
+solo_user = Agent(name="solo_user", seed="kagaz-e2e-solo-user", port=8196,
+                  endpoint=["http://127.0.0.1:8196/submit"])
+solo_step = {"i": 0, "failed": ""}
+solo_done = asyncio.Event()
+
+
+async def solo_send(ctx: Context):
+    if solo_step["i"] >= len(SOLO_CHECKS):
+        solo_done.set()
+        return
+    role, text, _ = SOLO_CHECKS[solo_step["i"]]
+    to = config.address_for(role)
+    if text is None:
+        await ctx.send(to, ChatMessage(
+            timestamp=datetime.now(timezone.utc), msg_id=uuid4(),
+            content=[ResourceContent(type="resource", resource_id=uuid4(), resource=Resource(
+                uri="agent-storage://test/screenshot.png",
+                metadata={"mime_type": "image/png", "role": "user-upload"}))]))
+    else:
+        await ctx.send(to, text_message(text))
+
+
+@solo_user.on_event("startup")
+async def solo_start(ctx: Context):
+    await asyncio.sleep(4)  # let the human CA register with the marketplace first
+    await solo_send(ctx)
+
+
+@solo_user.on_message(ChatAcknowledgement)
+async def solo_ack(ctx: Context, sender: str, msg: ChatAcknowledgement):
+    pass
+
+
+@solo_user.on_message(ChatMessage)
+async def solo_reply(ctx: Context, sender: str, msg: ChatMessage):
+    text = " ".join(c.text for c in msg.content if isinstance(c, TextContent))
+    if not text or solo_step["i"] >= len(SOLO_CHECKS):
+        return
+    role, _, wants = SOLO_CHECKS[solo_step["i"]]
+    if sender != config.address_for(role):
+        return
+    print("\n" + "~" * 70 + f"\nSOLO {role.upper()} << {text[:500]}")
+    missing = [w for w in wants if w not in text]
+    if missing:
+        solo_step["failed"] = f"{role} reply is missing {missing}"
+        solo_done.set()
+        return
+    solo_step["i"] += 1
+    await solo_send(ctx)
+
+
 async def main():
-    agents = build_all() + [human_ca, shield, user]
+    agents = build_all() + [human_ca, shield, user, solo_user]
     bureau = Bureau(agents=agents, port=8198)
     task = asyncio.create_task(bureau.run_async())
     try:
-        await asyncio.wait_for(done.wait(), timeout=float(os.getenv("E2E_TIMEOUT", "180")))
-        if shield_result.get("verdict") != "SCAM":
+        timeout = float(os.getenv("E2E_TIMEOUT", "180"))
+        await asyncio.wait_for(asyncio.gather(done.wait(), solo_done.wait()), timeout=timeout)
+        if solo_step["failed"]:
+            print(f"\n❌ E2E FAILED (solo agents): {solo_step['failed']}")
+            code = 1
+        elif shield_result.get("verdict") != "SCAM":
             print(f"\n❌ E2E FAILED: outside agent got {shield_result or 'no reply'} from Verify")
             code = 1
         else:
-            print(f"\n✅ E2E PASSED: all {len(script)} steps completed, plus Verify reuse")
+            print(f"\n✅ E2E PASSED: all {len(script)} steps completed, plus Verify reuse "
+                  f"and {len(SOLO_CHECKS)} direct chats with single agents")
             code = 0
     except asyncio.TimeoutError:
-        print(f"\n❌ E2E FAILED at step {step['i']}: {script[step['i']][:2]}")
+        if step["i"] < len(script):
+            print(f"\n❌ E2E FAILED at step {step['i']}: {script[step['i']][:2]}")
+        else:
+            print(f"\n❌ E2E FAILED (solo agents) at check {solo_step['i']}: "
+                  f"{SOLO_CHECKS[solo_step['i']][0]} did not reply")
         code = 1
     task.cancel()
     return code

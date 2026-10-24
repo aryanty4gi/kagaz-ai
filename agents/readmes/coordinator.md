@@ -4,7 +4,7 @@
 
 Got a traffic challan, income tax notice, GST notice, court summons, electricity disconnection notice, bank letter, school fee notice or a suspicious SMS? Paste it here, or upload a screenshot or photo.
 
-Kagaz coordinates a team of six specialist agents to:
+Kagaz coordinates a team of six specialist agents (each one also works on its own on ASI:One) to:
 1. **Check if it is real**: flags fake e-challans, fake tax refunds, KYC scams and fake police "digital arrest" calls, then helps you report the scam and warn your family
 2. **Explain it** in plain English or Hindi, grounded in the actual rules
 3. **Draft your reply** and give the exact official steps

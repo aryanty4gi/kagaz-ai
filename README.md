@@ -173,21 +173,24 @@ pip install -r requirements.txt
 cp .env.example .env        # add ASI1_API_KEY and your own long random seeds
 ```
 
-**Option A: one process (quickest)**. Coordinator on Agentverse, specialists in-process:
+**Option A: one process (quickest)**. All seven agents in one process, each with its own
+Agentverse mailbox and profile; the Coordinator calls the specialists in-process:
 
 ```bash
 python run_local.py
 ```
 
-**Option B: full Agentverse**. Each agent in its own process with its own Agentverse profile:
+**Option B: one process per agent**:
 
 ```bash
 python run_all.py
 ```
 
-On first run, open each agent's **inspector link** from the logs, click
-**Connect -> Mailbox**, then open the Coordinator's **Agent Profile -> Chat with Agent**
-to use it in ASI:One.
+**Every agent on its own.** Put an Agentverse API key in `.env` as `AGENTVERSE_API_KEY`
+(agentverse.ai -> Profile -> API Keys). On start, each specialist then creates its own
+Agentverse mailbox and profile, so it can be chatted with directly on ASI:One. Without the
+key, open each agent's **inspector link** from the logs and click **Connect -> Mailbox**.
+Then open any agent's **Agent Profile -> Chat with Agent** to use it in ASI:One.
 
 ### Tests
 
@@ -197,7 +200,8 @@ python -m tests.e2e_local                             # full multi-agent flow, o
 ```
 
 The end-to-end test runs all seven agents, a human CA's expert agent, an outside "SMS Shield"
-agent and a simulated ASI:One user. It covers the scam flow with the report pack, the
+agent and two simulated ASI:One users (one uses the Coordinator, one chats with each specialist
+directly). It covers the scam flow with the report pack, the
 genuine-notice flow with reminders, payment and a review answered by the CA over chat, a
 screenshot upload, and Verify reuse. `E2E_FAKE_STRIPE=1` runs the payment through the Stripe code path.
 
@@ -228,18 +232,18 @@ environment variables, and set `KAGAZ_KEEPALIVE_URL` if the host sleeps when idl
 **Live 24/7:** the agents run on Render ([status page](https://kagaz-ai-wrgn.onrender.com)). Chat with `@kagaz` on ASI:One (web).
 
 
-Talk to Kagaz on ASI:One through the **Coordinator**. The **Verify** agent can also be used on its own.
+Talk to Kagaz on ASI:One through the **Coordinator** for the full flow. **Every specialist also works on its own**: mention just that agent on ASI:One (or open its Agentverse profile and click *Chat with Agent*) and it gives a complete answer for its job, for example send a scam SMS straight to Kagaz Verify.
 Each address is fixed by its private seed.
 
-| Agent | Address | Agentverse profile |
-|---|---|---|
-| Kagaz Coordinator | `agent1qwvc8wrwftwgzlanhhc6k5pq55ukqet5yw7jsej6aqyrlt3ull46u4zrqya` | [profile](https://agentverse.ai/agents/details/agent1qwvc8wrwftwgzlanhhc6k5pq55ukqet5yw7jsej6aqyrlt3ull46u4zrqya/profile) |
-| Kagaz Reader | `agent1qtjw2au76rw2ff9m800x5ntn33xrpfhlaky4f6hfujwgqvfsaatdzdayz2v` | runs with the Coordinator (`run_all.py` gives it its own profile) |
-| Kagaz Verify | `agent1qdtcq0dwcttl7xnw4rzl0zdjepzlxkc67ts9gzvn3fmxr5fqm3csu52rfqn` | runs with the Coordinator (`run_all.py` gives it its own profile) |
-| Kagaz Rules | `agent1qwsh25v2m9xut4mklgt6scuzn3prxrs5d7qh88ttkgcshtg0rl6yu577xvj` | runs with the Coordinator (`run_all.py` gives it its own profile) |
-| Kagaz Action | `agent1q2wf6asmghlw3pkc7zv58tx3ncln0fpf9pfhmpcdsrkv5uj4rgawkzjucq3` | runs with the Coordinator (`run_all.py` gives it its own profile) |
-| Kagaz Expert Desk | `agent1qda68rafn0axayysd926uwdqzzpsqxdgapc4ykqrwrapcrdv7aqlg8xch3l` | runs with the Coordinator (`run_all.py` gives it its own profile) |
-| Kagaz Marketplace | shown on the [status page](https://kagaz-ai-wrgn.onrender.com) | runs with the Coordinator (`run_all.py` gives it its own profile) |
+| Agent | Address | Agentverse profile | Send it on its own |
+|---|---|---|---|
+| Kagaz Coordinator | `agent1qwvc8wrwftwgzlanhhc6k5pq55ukqet5yw7jsej6aqyrlt3ull46u4zrqya` | [profile](https://agentverse.ai/agents/details/agent1qwvc8wrwftwgzlanhhc6k5pq55ukqet5yw7jsej6aqyrlt3ull46u4zrqya/profile) | the whole flow, with cards |
+| Kagaz Reader | `agent1qtjw2au76rw2ff9m800x5ntn33xrpfhlaky4f6hfujwgqvfsaatdzdayz2v` | [profile](https://agentverse.ai/agents/details/agent1qtjw2au76rw2ff9m800x5ntn33xrpfhlaky4f6hfujwgqvfsaatdzdayz2v/profile) | a notice or photo: get type, sender, amount, deadline, refs |
+| Kagaz Verify | `agent1qdtcq0dwcttl7xnw4rzl0zdjepzlxkc67ts9gzvn3fmxr5fqm3csu52rfqn` | [profile](https://agentverse.ai/agents/details/agent1qdtcq0dwcttl7xnw4rzl0zdjepzlxkc67ts9gzvn3fmxr5fqm3csu52rfqn/profile) | an SMS or screenshot: scam verdict + complaint text |
+| Kagaz Rules | `agent1qwsh25v2m9xut4mklgt6scuzn3prxrs5d7qh88ttkgcshtg0rl6yu577xvj` | [profile](https://agentverse.ai/agents/details/agent1qwsh25v2m9xut4mklgt6scuzn3prxrs5d7qh88ttkgcshtg0rl6yu577xvj/profile) | a notice: meaning, rights, deadline rule (add "in Hindi") |
+| Kagaz Action | `agent1q2wf6asmghlw3pkc7zv58tx3ncln0fpf9pfhmpcdsrkv5uj4rgawkzjucq3` | [profile](https://agentverse.ai/agents/details/agent1q2wf6asmghlw3pkc7zv58tx3ncln0fpf9pfhmpcdsrkv5uj4rgawkzjucq3/profile) | a notice: steps, reply letter, reminder dates |
+| Kagaz Expert Desk | `agent1qda68rafn0axayysd926uwdqzzpsqxdgapc4ykqrwrapcrdv7aqlg8xch3l` | [profile](https://agentverse.ai/agents/details/agent1qda68rafn0axayysd926uwdqzzpsqxdgapc4ykqrwrapcrdv7aqlg8xch3l/profile) | a notice (+ `Draft:` your reply): expert-style review |
+| Kagaz Marketplace | shown on the [status page](https://kagaz-ai-wrgn.onrender.com) | own profile (address on the status page) | "hi": approved experts; a notice: who'd review it |
 
 ## Business model
 

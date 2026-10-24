@@ -40,13 +40,21 @@ from uagents_core.contrib.protocols.payment import (
     payment_protocol_spec,
 )
 
+from agents import solo
 from agents.common import make_agent
-from kagaz import config
+from kagaz import config, llm
 from kagaz.cards import text_message
-from kagaz.core import expert, knowledge
+from kagaz.core import action, expert, knowledge, rules
 from kagaz.core.reader import NoticeFields
 from kagaz.messages import (
     ExpertReviewRequest, ExpertReviewResult, RegisterExpert, RegisterExpertAck,
+)
+
+DESK_WELCOME = (
+    "🧑‍⚖️ I'm the **Kagaz Expert Desk**. Paste an official notice and I'll draft a reply "
+    "and review it like a senior CA/lawyer would: verdict, improvements, documents to "
+    "attach and risks. Already have a reply? Paste the notice, then a line `Draft:` "
+    "followed by your reply, and I'll review yours."
 )
 
 REAL_FET = os.getenv("KAGAZ_REAL_FET", "false").lower() == "true"
@@ -208,8 +216,8 @@ def build(mailbox: bool | None = None, profile: dict | None = None):
                                                    acknowledged_msg_id=msg.msg_id))
         text = " ".join(c.text for c in msg.content if isinstance(c, TextContent)).strip()
         if not human:
-            await ctx.send(sender, text_message(
-                "I'm Kagaz's Expert Desk. Talk to @kagaz to get a notice checked."))
+            # Used on its own from ASI:One: review the person's notice and draft.
+            await ctx.send(sender, text_message(await desk_review(text)))
             return
         owner = ctx.storage.get("owner")
         m = re.match(r"login\s+(\S+)", text, re.IGNORECASE)
@@ -249,6 +257,32 @@ def build(mailbox: bool | None = None, profile: dict | None = None):
         await ctx.send(sender, text_message(
             f"Pending jobs: {', '.join(f'`{c}`' for c in pending) or 'none'}.\n"
             "Answer one with `review <case_id>: <your review>`."))
+
+    async def desk_review(text: str) -> str:
+        if len(text) < 40:
+            return DESK_WELCOME
+        parts = re.split(r"\bdraft\s*:", text, maxsplit=1, flags=re.IGNORECASE)
+        notice = parts[0].strip()
+        draft = parts[1].strip() if len(parts) > 1 else ""
+        fields = solo.read_fields(notice)
+        warn = await asyncio.to_thread(solo.scam_warning, fields)
+        made = ""
+        if not draft:
+            # No draft given: have the Action logic write one, then review it.
+            token = llm.OFFLINE.set(True)
+            try:
+                exp = rules.explain(fields, "en")
+            finally:
+                llm.OFFLINE.reset(token)
+            draft = (await asyncio.to_thread(action.build_plan, fields, exp, ""))["draft"]
+            made = ("**Draft reply I prepared** (fill in the [brackets]):\n```\n"
+                    + draft.strip() + "\n```\n\n")
+        review = await asyncio.to_thread(expert.review, fields, draft)
+        return (warn + f"🧑‍⚖️ **Expert review: {fields.title}**\n\n" + made
+                + "**Review**\n" + review
+                + f"\n\n_{expert.REVIEWER}. For a review by a verified human CA or lawyer "
+                f"(Rs {config.EXPERT_FEE_INR}, paid through the Payment Protocol), use @kagaz. "
+                "Not legal advice._" + solo.FOOTER)
 
     async def notify_owner_again(ctx: Context, owner: str, case_id: str, job: dict):
         await ctx.send(owner, text_message(

@@ -6,19 +6,13 @@ usable from ASI:One through the Agent Chat Protocol ("is this SMS real?").
 
 import asyncio
 import json
-from datetime import datetime, timezone
 
 from uagents import Context, Protocol
-from uagents_core.contrib.protocols.chat import (
-    ChatAcknowledgement,
-    ChatMessage,
-    TextContent,
-    chat_protocol_spec,
-)
 
+from agents import solo
 from agents.common import make_agent
-from kagaz.cards import text_message
 from kagaz.core import reader, verify
+from kagaz.core import report as scam_report
 from kagaz.core.reader import NoticeFields
 from kagaz.messages import VerifyRequest, VerifyResult
 
@@ -65,25 +59,26 @@ def build(mailbox: bool | None = None):
             ctx.logger.exception("Verify failed")
             await ctx.send(sender, VerifyResult(ok=False, report_json="{}", error=str(err)))
 
-    chat = Protocol(spec=chat_protocol_spec)
-
-    @chat.on_message(ChatMessage)
-    async def on_chat(ctx: Context, sender: str, msg: ChatMessage):
-        await ctx.send(sender, ChatAcknowledgement(timestamp=datetime.now(timezone.utc),
-                                                   acknowledged_msg_id=msg.msg_id))
-        text = " ".join(c.text for c in msg.content if isinstance(c, TextContent)).strip()
-        if len(text) < 15:
-            await ctx.send(sender, text_message(
-                "Paste the full SMS, email or notice text (including any link) and "
-                "I'll tell you if it looks genuine or like a scam."))
-            return
-        fields = reader.extract_rule_based(text)
+    async def on_chat(ctx: Context, sender: str, text: str, language: str) -> str:
+        fields = solo.read_fields(text)
         report = await asyncio.to_thread(verify.verify, fields)
-        await ctx.send(sender, text_message(format_report(report)))
+        reply = format_report(report)
+        if report.verdict in ("SCAM", "SUSPICIOUS"):
+            rep = report.to_dict()
+            reply += (
+                "\n\n🛡️ **Report it:** file at https://cybercrime.gov.in or call **1930** "
+                "(within the first hour if you lost money). Complaint text you can copy:\n"
+                "```\n" + scam_report.complaint_text(fields, rep) + "\n```\n"
+                "**Warn your family** (forward on WhatsApp):\n"
+                "```\n" + scam_report.family_warning(fields, rep) + "\n```")
+        return reply
 
-    @chat.on_message(ChatAcknowledgement)
-    async def on_ack(ctx: Context, sender: str, msg: ChatAcknowledgement):
-        pass
+    chat = solo.chat_protocol(
+        "verify",
+        "🛡️ I'm **Kagaz Verify**. Paste the full SMS, email, WhatsApp message or notice "
+        "(including any link), or upload a screenshot, and I'll tell you if it looks "
+        "genuine or like a scam.",
+        on_chat)
 
     agent.include(internal, publish_manifest=True)
     agent.include(chat, publish_manifest=True)

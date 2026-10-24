@@ -369,3 +369,33 @@ def test_kyc_update_link_is_a_scam_but_plain_kyc_reminder_is_not():
     plain = verify.verify(reader.extract_rule_based(
         "Dear customer, please complete your KYC at your nearest branch."), use_llm=False)
     assert plain.verdict != "SCAM"
+
+
+def test_single_agent_answers_are_complete():
+    """Each specialist's own answer (used when it is chatted with directly)."""
+    from agents import solo
+    from kagaz.core import action, rules
+
+    elec = (SAMPLES / "04_electricity_disconnection.txt").read_text()
+    fields = solo.read_fields(elec)
+    assert "₹6,240" in solo.format_fields(fields)
+    exp = rules.explain(fields, "en")
+    text = solo.format_explanation(exp)
+    assert "Your rights" in text and "What to do" in text
+    plan = action.build_plan(fields, exp)
+    assert "Your draft reply" in solo.format_plan(exp, plan, scam=False)
+    assert "Your draft reply" not in solo.format_plan(exp, plan, scam=True)
+    assert solo.scam_warning(fields) == ""
+    fake = solo.read_fields((SAMPLES / "01_fake_echallan_sms.txt").read_text())
+    assert solo.scam_warning(fake).startswith("🚨")
+
+
+def test_mailbox_auto_connect_skips_coordinator_by_default(monkeypatch):
+    from agents.common import should_auto_connect
+
+    monkeypatch.delenv("KAGAZ_CONNECT_COORDINATOR", raising=False)
+    monkeypatch.delenv("KAGAZ_AUTO_CONNECT", raising=False)
+    assert not should_auto_connect("coordinator")
+    assert should_auto_connect("verify")
+    monkeypatch.setenv("KAGAZ_AUTO_CONNECT", "false")
+    assert not should_auto_connect("rules")

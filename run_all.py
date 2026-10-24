@@ -2,9 +2,9 @@
 
     python run_all.py
 
-The coordinator gets an Agentverse mailbox so ASI:One can reach it. The
-specialists use local endpoints (registered on the Almanac) by default; set
-KAGAZ_ALL_MAILBOX=true to give every agent its own mailbox and profile.
+The coordinator gets an Agentverse mailbox so ASI:One can reach it. With
+AGENTVERSE_API_KEY set (or KAGAZ_ALL_MAILBOX=true) every specialist gets its
+own mailbox and profile too, so each one can be chatted with on its own.
 On first run, open the coordinator's inspector link from the logs and click
 Connect -> Mailbox.
 """
@@ -73,7 +73,10 @@ def start_cloud_helpers():
 
 def main():
     start_cloud_helpers()
-    all_mailbox = os.getenv("KAGAZ_ALL_MAILBOX", "false").lower() == "true"
+    # With an Agentverse API key every agent gets (and auto-creates) its own
+    # mailbox, so each one can be chatted with on its own from ASI:One.
+    default = "true" if os.getenv("AGENTVERSE_API_KEY") else "false"
+    all_mailbox = os.getenv("KAGAZ_ALL_MAILBOX", default).lower() == "true"
     procs = []
     for name in AGENTS:
         mailbox = "true" if (name == "coordinator" or all_mailbox) else "false"

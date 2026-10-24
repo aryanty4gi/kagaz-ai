@@ -34,8 +34,10 @@ from uagents_core.contrib.protocols.payment import (
     payment_protocol_spec,
 )
 
+from agents import solo
 from agents.common import make_agent
 from kagaz import config
+from kagaz.core import knowledge
 from kagaz.messages import (
     ExpertJobRequest, ExpertJobResult, ExpertReviewRequest, ExpertReviewResult,
     RegisterExpert, RegisterExpertAck,
@@ -250,8 +252,57 @@ def build(mailbox: bool | None = None):
             reviewer=reviewer_label(e) if sender in data else msg.reviewer,
             payout=job.get("payout", ""), tx=job.get("tx", ""), error=msg.error))
 
+    # -------------------------------------------------- chat (used on its own)
+
+    def expert_list(ctx: Context) -> str:
+        data = experts(ctx)
+        rows = []
+        for e in data.values():
+            if e["status"] != "approved":
+                continue
+            spec = ", ".join(knowledge.get(t)["title"] if t != "all" else "all notices"
+                             for t in e["specialties"])
+            rows.append(f"- **{reviewer_label(e)}**: {spec}; fee {e['fee']} "
+                        f"{config.EXPERT_FEE_CURRENCY}; {e.get('done', 0)} jobs done")
+        pending = sum(1 for e in data.values() if e["status"] == "pending")
+        text = "**Approved experts right now**\n" + ("\n".join(rows) or
+                                                    "- Kagaz Expert Desk (AI-assisted, always on)")
+        if pending:
+            text += f"\n\n_{pending} more waiting for credential checks._"
+        return text
+
+    async def on_chat(ctx: Context, sender: str, text: str, language: str) -> str:
+        low = text.lower()
+        how = (
+            "**How it works**\n"
+            f"1. You pay Rs {config.EXPERT_FEE_INR} for a review (through @kagaz, card/UPI).\n"
+            "2. I pick the best approved CA or lawyer for that notice type, within budget.\n"
+            f"3. The expert's own agent is paid up to {config.EXPERT_FEE_AMOUNT} "
+            f"{config.EXPERT_FEE_CURRENCY} per job with the Agent Payment Protocol "
+            f"(Kagaz keeps {config.PLATFORM_FEE_PERCENT:g}%).\n"
+            "4. If no human takes the job in time, the AI-assisted Expert Desk does it.")
+        join = ("**Are you a CA or lawyer?** Run your own Kagaz expert agent and register "
+                "with your ICAI membership number or Bar Council enrolment number: "
+                "https://github.com/aryanty4gi/kagaz-ai/blob/main/docs/EXPERTS.md")
+        if len(text) >= 40 and not any(w in low for w in ("join", "register", "list")):
+            fields = solo.read_fields(text)
+            data = experts(ctx)
+            addr = pick_expert(data, fields.notice_type, float(config.EXPERT_FEE_AMOUNT))
+            who = (reviewer_label(data[addr]) if addr in data
+                   else "Kagaz Expert Desk (AI-assisted review, prototype)")
+            return (f"🧑‍⚖️ **Best expert for this {fields.title}:** {who}\n\n"
+                    f"Fee: Rs {config.EXPERT_FEE_INR}. To book the review, send the notice to "
+                    "@kagaz and tap **Get expert review**.\n\n" + how)
+        return ("🏪 I'm the **Kagaz Expert Marketplace**. Verified CAs and lawyers review "
+                "replies to official notices and get paid per job.\n\n"
+                + expert_list(ctx) + "\n\n" + how + "\n\n" + join
+                + "\n\n_Paste a notice to see which expert would take it._")
+
+    chat = solo.chat_protocol("marketplace", "", on_chat, images=False, min_chars=0)
+
     agent.include(market, publish_manifest=True)
     agent.include(payments, publish_manifest=True)
+    agent.include(chat, publish_manifest=True)
     return agent
 
 

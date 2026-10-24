@@ -19,6 +19,13 @@ ASI1_MODEL = os.getenv("ASI1_MODEL", "asi1")
 # "true" = connect each agent to its Agentverse mailbox (needed for ASI:One).
 # "false" = local-only endpoints, useful for offline testing.
 USE_MAILBOX = os.getenv("KAGAZ_USE_MAILBOX", "true").lower() == "true"
+# Give every specialist its own mailbox too, so each one can be chatted with
+# on its own from ASI:One. Inside one process (run_local.py) the coordinator
+# still reaches them directly, so this adds no delay to the main flow.
+SPECIALIST_MAILBOX = os.getenv("KAGAZ_SPECIALIST_MAILBOX", str(USE_MAILBOX)).lower() == "true"
+# Agentverse API key (agentverse.ai -> Profile -> API Keys). When set, each
+# agent creates its own Agentverse mailbox on start, so no inspector clicks.
+AGENTVERSE_API_KEY = os.getenv("AGENTVERSE_API_KEY", "")
 
 # Turn off live internet lookups (domain age checks) for offline tests.
 ONLINE_CHECKS = os.getenv("KAGAZ_ONLINE_CHECKS", "true").lower() == "true"

@@ -1,10 +1,16 @@
-"""Rules Agent: explains a notice in plain Hindi or English from grounded rules."""
+"""Rules Agent: explains a notice in plain Hindi or English from grounded rules.
+
+Serves the coordinator, and also works alone on ASI:One: paste a notice
+(add "in Hindi" for Hindi) and it explains what it means, your rights,
+the deadline rule and what to do.
+"""
 
 import asyncio
 import json
 
 from uagents import Context, Protocol
 
+from agents import solo
 from agents.common import make_agent
 from kagaz.core import rules
 from kagaz.core.reader import NoticeFields
@@ -31,7 +37,22 @@ def build(mailbox: bool | None = None):
             ctx.logger.exception("Rules failed")
             await ctx.send(sender, RulesResult(ok=False, explanation_json="{}", error=str(err)))
 
+    async def on_chat(ctx: Context, sender: str, text: str, language: str) -> str:
+        fields = solo.read_fields(text)
+        warn = await asyncio.to_thread(solo.scam_warning, fields)
+        explanation = await asyncio.to_thread(rules.explain, fields, language)
+        return warn + solo.format_explanation(explanation)
+
+    chat = solo.chat_protocol(
+        "rules",
+        "📘 I'm **Kagaz Rules**. Paste any Indian official notice (traffic challan, income "
+        "tax, GST, electricity, bank, court summons, school fee) or upload a photo. I'll "
+        "explain what it means, your rights, the deadline and what to do. Add *\"in Hindi\"* "
+        "for Hindi.",
+        on_chat)
+
     agent.include(proto, publish_manifest=True)
+    agent.include(chat, publish_manifest=True)
     return agent
 
 
