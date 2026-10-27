@@ -18,6 +18,7 @@ log = logging.getLogger("kagaz.ocr")
 
 MIN_USEFUL_CHARS = 25
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
+MAX_IMAGE_PIXELS = 40_000_000  # refuse "decompression bomb" images
 IMAGE_TYPES = {"image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif",
                "image/bmp", "image/tiff", "image/heic"}
 
@@ -59,7 +60,11 @@ def tesseract_text(data: bytes) -> str:
         import pytesseract
         from PIL import Image
 
-        img = _prepare(Image.open(io.BytesIO(data)))
+        Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
+        img = Image.open(io.BytesIO(data))
+        if img.width * img.height > MAX_IMAGE_PIXELS:
+            raise ValueError("image too large")
+        img = _prepare(img)
         return clean(pytesseract.image_to_string(img, lang=_languages()))
     except Exception as err:  # tesseract missing, unreadable image
         log.warning("OCR failed: %s", err)

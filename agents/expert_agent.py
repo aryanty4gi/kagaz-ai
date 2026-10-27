@@ -41,7 +41,7 @@ from uagents_core.contrib.protocols.payment import (
 
 from agents import solo
 from agents.common import make_agent
-from kagaz import config, llm
+from kagaz import config, llm, security
 from kagaz.cards import text_message
 from kagaz.core import action, expert, knowledge, rules, talk
 from kagaz.core.reader import NoticeFields
@@ -100,6 +100,8 @@ def build(mailbox: bool | None = None, profile: dict | None = None):
     review_proto = Protocol(name="KagazExpertReview", version="1.0.0")
     payment = Protocol(spec=payment_protocol_spec, role="seller")
     chat = Protocol(spec=chat_protocol_spec)
+    limiter = security.RateLimiter()
+    pins = security.PinGuard()
 
     # -------------------------------------------------- registration
 
@@ -213,7 +215,11 @@ def build(mailbox: bool | None = None, profile: dict | None = None):
     async def on_chat(ctx: Context, sender: str, msg: ChatMessage):
         await ctx.send(sender, ChatAcknowledgement(timestamp=datetime.now(timezone.utc),
                                                    acknowledged_msg_id=msg.msg_id))
-        text = solo.chat_text(msg)
+        if not limiter.allow(sender):
+            if limiter.should_warn(sender):
+                await ctx.send(sender, text_message(security.SLOW_DOWN))
+            return
+        text = security.clip(solo.chat_text(msg))
         if not human:
             # Used on its own from ASI:One: review the person's notice and draft.
             await ctx.send(sender, text_message(await desk_review(text)))
@@ -221,7 +227,10 @@ def build(mailbox: bool | None = None, profile: dict | None = None):
         owner = ctx.storage.get("owner")
         m = re.match(r"login\s+(\S+)", text, re.IGNORECASE)
         if m:
-            if profile.get("pin") and m.group(1) == profile["pin"]:
+            if pins.locked(sender):
+                await ctx.send(sender, text_message("Too many wrong PINs. Try again in 15 minutes."))
+                return
+            if pins.check(sender, m.group(1), profile.get("pin", "")):
                 ctx.storage.set("owner", sender)
                 reg = ctx.storage.get("registration") or {}
                 await ctx.send(sender, text_message(

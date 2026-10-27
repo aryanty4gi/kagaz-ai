@@ -488,3 +488,34 @@ def test_casual_chat_greets_and_answers_questions(monkeypatch):
     assert talk.answer("Can my landlord cut my electricity?", "expert") == "Short answer."
     monkeypatch.setattr(llm, "complete", lambda system, user, max_tokens=0: None)
     assert talk.answer("Can my landlord cut my electricity?", "expert") is None
+
+
+def test_security_guards():
+    from kagaz import security
+
+    rl = security.RateLimiter(per_minute=3, per_day=5)
+    assert all(rl.allow("a", now=100 + i) for i in range(3))
+    assert not rl.allow("a", now=104)          # 4th in a minute is blocked
+    assert rl.allow("b", now=104)              # other senders are not affected
+    assert rl.allow("a", now=170) and rl.allow("a", now=171)
+    assert not rl.allow("a", now=300)          # daily cap of 5 reached
+    assert rl.should_warn("a", now=300) and not rl.should_warn("a", now=310)
+
+    assert len(security.clip("x" * 10000)) == security.MAX_TEXT_CHARS
+    assert security.clip("a\x00b") == "ab"
+
+    for bad in ("http://example.com/a.png", "https://127.0.0.1/a.png",
+                "https://169.254.169.254/latest", "https://localhost/a",
+                "https://user:pw@example.com/a", "file:///etc/passwd"):
+        try:
+            security.safe_fetch(bad, 1000)
+        except ValueError:
+            continue
+        raise AssertionError(f"{bad} was fetched")
+
+    pins = security.PinGuard(max_tries=2, lock_seconds=60)
+    assert not pins.check("x", "1111", "")       # no PIN set = no login
+    assert not pins.check("x", "0000", "4321", now=1)
+    assert not pins.check("x", "0001", "4321", now=2)
+    assert not pins.check("x", "4321", "4321", now=3)   # locked even with the right PIN
+    assert pins.check("x", "4321", "4321", now=100)     # lock expires

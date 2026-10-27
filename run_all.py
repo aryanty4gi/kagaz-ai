@@ -34,15 +34,24 @@ class _Health(BaseHTTPRequestHandler):
 
             for role in config.AGENTS:
                 lines.append(f"{role:<12} {config.address_for(role)}")
-        except Exception as err:  # never break the health check
-            lines.append(f"(addresses unavailable: {err})")
+        except Exception:  # never break the health check, never leak error text
+            lines.append("(addresses unavailable)")
         body = ("\n".join(lines) + "\n").encode()
         self.send_response(200)
-        self.send_header("Content-Type", "text/plain")
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Content-Security-Policy", "default-src 'none'")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
 
     do_HEAD = do_GET
+
+    # Plain page, so hide the Python version from the Server header.
+    server_version = "kagaz"
+    sys_version = ""
 
     def log_message(self, *args):
         pass

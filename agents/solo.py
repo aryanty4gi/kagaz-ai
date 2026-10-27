@@ -24,7 +24,7 @@ from uagents_core.contrib.protocols.chat import (
 )
 from uagents_core.identity import Identity
 
-from kagaz import cards, config
+from kagaz import cards, config, security
 from kagaz.core import ocr, reader, talk, verify
 from kagaz.core.reader import NoticeFields
 
@@ -66,6 +66,7 @@ def chat_protocol(role: str, welcome: str, handler: Handler, images: bool = True
 
     chat = Protocol(spec=chat_protocol_spec)
     identity = Identity.from_seed(config.seed_for(role), 0)
+    limiter = security.RateLimiter()
 
     @chat.on_message(ChatMessage)
     async def on_chat(ctx: Context, sender: str, msg: ChatMessage):
@@ -75,7 +76,11 @@ def chat_protocol(role: str, welcome: str, handler: Handler, images: bool = True
             await ctx.send(sender, ChatMessage(
                 timestamp=datetime.now(timezone.utc), msg_id=uuid4(),
                 content=[MetadataContent(type="metadata", metadata={"attachments": "true"})]))
-        text = chat_text(msg)
+        if not limiter.allow(sender):
+            if limiter.should_warn(sender):
+                await ctx.send(sender, cards.text_message(security.SLOW_DOWN))
+            return
+        text = security.clip(chat_text(msg))
         # Hindi when the message is in Hindi or asks for it; each message stands alone.
         language = detect_language(text, "en")
         text = strip_language_request(text)

@@ -41,6 +41,7 @@ from agents import solo
 from agents.common import make_agent
 from kagaz import cards, config, llm
 from kagaz import payments as gateway
+from kagaz import security
 from kagaz.core import action, knowledge, ocr, reader, report as scam_report, rules, talk, verify
 from kagaz.core.reader import NoticeFields
 from kagaz.messages import (
@@ -233,13 +234,10 @@ def download_image(item: ResourceContent, identity: Identity) -> tuple[bytes, st
         data = store.download(str(item.resource_id))
         return base64.b64decode(data["contents"]), data.get("mime_type") or mime
     except Exception as err:
-        if not res.uri.startswith(("https://", "http://")):
+        if not (res.uri or "").startswith("https://"):
             raise RuntimeError(f"storage download failed: {err}") from err
-    import requests
-
-    resp = requests.get(res.uri, timeout=15)
-    resp.raise_for_status()
-    return resp.content, resp.headers.get("content-type", mime)
+    data, ctype = security.safe_fetch(res.uri, ocr.MAX_IMAGE_BYTES)
+    return data, ctype or mime
 
 
 # ---------------------------------------------------------------- agent
@@ -253,6 +251,7 @@ def build(mailbox: bool | None = None):
         mailbox,
     )
     chat = Protocol(spec=chat_protocol_spec)
+    limiter = security.RateLimiter()
     # Coordinator sells expert reviews to the user (Stripe gateway or demo);
     # the marketplace agent pays the experts.
     payments = Protocol(spec=payment_protocol_spec, role="seller")
@@ -641,7 +640,11 @@ def build(mailbox: bool | None = None):
             await ctx.send(sender, ChatMessage(
                 timestamp=datetime.now(timezone.utc), msg_id=uuid4(),
                 content=[MetadataContent(type="metadata", metadata={"attachments": "true"})]))
-        text = solo.chat_text(msg)
+        if not limiter.allow(sender):
+            if limiter.should_warn(sender):
+                await ctx.send(sender, cards.text_message(security.SLOW_DOWN))
+            return
+        text = security.clip(solo.chat_text(msg))
         resources = [c for c in msg.content if isinstance(c, ResourceContent)]
         state = load(ctx, sender)
         state["language"] = detect_language(text, state.get("language", "en"))
